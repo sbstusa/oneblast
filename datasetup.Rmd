@@ -1,0 +1,45 @@
+---
+title:Data Setup and Cleaning
+author: Jake Bowers
+date: 7 July 2016
+...
+
+The construction of the outcome measure depends on matching email addresses of those who subscribed with those who were randomly assigned to different conditions.
+
+ - Downloaded the `01 mos_email_addresses.20150508122202 - randomized to MC&FP 18 NOV (2).xlsx` and `SBST_subscriptions_03182016.docx.xlsx` files and decrypted it using the provided password.
+ - Converted those files to .csv by hand using Microsoft Excel
+ - The emailtohash.R file does the following:
+     - Imported those files into R and converted the email addresses into sha256 un-decryptable hashes.  For example:
+
+First, combine the two files containing outcome information:
+
+```{r}
+subscriptions0<-read.csv("SBST_subscriptions_03182016.sheet0.csv",as.is=TRUE,header=TRUE)
+subscriptions1<-read.csv("SBST_subscriptions_03182016.sheet1.csv",as.is=TRUE,header=TRUE)
+subscriptions <- rbind(subscriptions0,subscriptions1)
+## We should have only one unique email address per row
+stopifnot(length(unique(subscriptions$Email.Address))==nrow(subscriptions))
+```
+
+Second, import the design information:
+```{r}
+rand <- read.csv("01 mos_email_addresses.20150508122202 - randomized to MC&FP 18 NOV (2).csv",as.is=TRUE,header=TRUE)
+
+```
+
+Third, generate hashes. For example, here is how hashes work:
+```{r}
+library(openssl)
+emailaddresses <- c("jacob.bowers@gsa.gov","jwbowers@illinois.edu")
+hashedaddresses <- sha256(emailaddresses)
+cbind(hashedaddresses,emailaddresses)
+```
+    
+    - Saved files (randomizationkey.csv and outcomeskey.csv) mapping the hashes to emails. 
+    - Saved files with only the hashes as identification (no emails) with the experimental design information (randomization.csv) and with the subscription information (subscriptions.csv)
+
+ - Uploaded all .csv files to OES/GSA Google Drive and erased the original files from the hard drive.
+
+
+ 
+
