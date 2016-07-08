@@ -6,10 +6,8 @@ date: 7 July 2016
 
 The construction of the outcome measure depends on matching email addresses of those who subscribed with those who were randomly assigned to different conditions.
 
- - Downloaded the `01 mos_email_addresses.20150508122202 - randomized to MC&FP 18 NOV (2).xlsx` and `SBST_subscriptions_03182016.docx.xlsx` files and decrypted it using the provided password.
+ - Downloaded the `01 mos_email_addresses.20150508122202 - randomized to MC&FP 18 NOV (2).xlsx` and `SBST_subscriptions_03182016.docx.xlsx` files from the emails to which they had been attached by the agency contacts and decrypted it using the provided password.
  - Converted those files to .csv by hand using Microsoft Excel
- - The emailtohash.R file does the following:
-     - Imported those files into R and converted the email addresses into sha256 un-decryptable hashes.  For example:
 
 First, combine the two files containing outcome information:
 
@@ -24,22 +22,40 @@ stopifnot(length(unique(subscriptions$Email.Address))==nrow(subscriptions))
 Second, import the design information:
 ```{r}
 rand <- read.csv("01 mos_email_addresses.20150508122202 - randomized to MC&FP 18 NOV (2).csv",as.is=TRUE,header=TRUE)
+stopifnot(length(unique(rand$Email.Address))==nrow(rand))
 
 ```
 
-Third, generate hashes. For example, here is how hashes work:
+Third, generate hashes. The idea is to create a unique identifier for each person. Since email addresses were used originally for this purpose, and we have shown that they are, in fact, unique, we'll try to convert them into some format that retains their uniqueness but from which the emails themselves cannot (basically ever) be recovered.
+
+For example, here is how hashes work:
 ```{r}
 library(openssl)
 emailaddresses <- c("jacob.bowers@gsa.gov","jwbowers@illinois.edu")
 hashedaddresses <- sha256(emailaddresses)
 cbind(hashedaddresses,emailaddresses)
 ```
-    
-    - Saved files (randomizationkey.csv and outcomeskey.csv) mapping the hashes to emails. 
-    - Saved files with only the hashes as identification (no emails) with the experimental design information (randomization.csv) and with the subscription information (subscriptions.csv)
 
- - Uploaded all .csv files to OES/GSA Google Drive and erased the original files from the hard drive.
+Now, do this for the full data. Create key files mapping emails to hashes just in case we have made a mistake or want to double check something. These files will be stored on the secure Google Drive along with the original files. Then create anonymized files that we can use to create the final analysis file.
 
+```{r}
+subscriptions$id <- sha256(subscriptions$Email.Address)
+rand$id <- sha256(rand$Email.Address)
 
- 
+randkey <- rand[,c("Email.Address","id")]
+designdata <- rand[,which(names(rand) != "Email.Address")]
 
+str(randkey)
+str(designdata)
+
+subscriptionkey <- subscriptions[,c("Email.Address","id")]
+subscriptiondata <- subscriptions[,c("id","Subscribe.Date")]
+
+str(subscriptionkey)
+str(subscriptiondata)
+
+write.csv(subscriptionkey,file="subscriptionkey.csv")
+write.csv(randkey,file="randkey.csv")
+write.csv(subscriptiondata,file="subscriptiondata.csv")
+write.csv(designdata,file="designdata.csv")
+```
