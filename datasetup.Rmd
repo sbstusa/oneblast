@@ -1,7 +1,7 @@
 ---
-title:Data Setup and Cleaning
+title: Data Setup and Cleaning
 author: Jake Bowers
-date: 7 July 2016
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
 ...
 
 The construction of the outcome measure depends on matching email addresses of those who subscribed with those who were randomly assigned to different conditions.
@@ -45,14 +45,14 @@ rand$id <- sha256(rand$Email.Address)
 randkey <- rand[,c("Email.Address","id")]
 designdata <- rand[,which(names(rand) != "Email.Address")]
 
-str(randkey)
-str(designdata)
+## str(randkey)
+## str(designdata)
 
 subscriptionkey <- subscriptions[,c("Email.Address","id")]
 subscriptiondata <- subscriptions[,c("id","Subscribe.Date")]
 
-str(subscriptionkey)
-str(subscriptiondata)
+## str(subscriptionkey)
+## str(subscriptiondata)
 
 write.csv(subscriptionkey,file="subscriptionkey.csv")
 write.csv(randkey,file="randkey.csv")
