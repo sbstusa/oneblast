@@ -6,56 +6,183 @@ date: '`r format(Sys.Date(), "%B %d, %Y")`'
 
 The construction of the outcome measure depends on matching email addresses of those who subscribed with those who were randomly assigned to different conditions.
 
- - Downloaded the `01 mos_email_addresses.20150508122202 - randomized to MC&FP 18 NOV (2).xlsx` and `SBST_subscriptions_03182016.docx.xlsx` files from the emails to which they had been attached by the agency contacts and decrypted it using the provided password.
- - Converted those files to .csv by hand using Microsoft Excel
+ - Downloaded the `mos-info.20160714101854.csv`, `01 mos_email_addresses.20150508122202 - randomized to MC&FP 18 NOV (2).xlsx`, and `SBST_subscriptions_03182016.docx.xlsx` files from the emails to which they had been attached by the agency contacts and decrypted it using the provided password.
+ - Converted the .xlsx file to .csv by hand using Microsoft Excel
+ - Removed a stray "," from line 136676 of `mos-info.20160714101854.csv` that was causing trouble in reading the file into R.
+ - Changed an accented o character to an o in line 965 of  `SBST_subscriptions_03182016.sheet0.csv`.
+ - Changed two accented characters to zz in line 4236 of  `SBST_subscriptions_03182016.sheet0.csv`, changed 1 accented character to o in line 5158.
 
 First, combine the two files containing outcome information:
 
 ```{r}
+## Fixing encoding errors discovered in the data
+findOffendingCharacter<-function(x, maxStringLength=256){
+	        ## from stackoverflow
+	  print(x)
+  for (c in 1:maxStringLength){
+	      offendingChar <- substr(x,c,c)
+      #print(offendingChar) #uncomment if you want the indiv characters printed
+      #the next character is the offending multibyte Character
+    }
+}
+
+## Assumes that the working directory of this file is the same as the raw data files.
 subscriptions0<-read.csv("SBST_subscriptions_03182016.sheet0.csv",as.is=TRUE,header=TRUE)
+tmp<-sapply(subscriptions0$Last.Name,findOffendingCharacter) ## this will make an error if needed
 subscriptions1<-read.csv("SBST_subscriptions_03182016.sheet1.csv",as.is=TRUE,header=TRUE)
+tmp<-sapply(subscriptions1$Last.Name,findOffendingCharacter) ## this will make an error if needed
 subscriptions <- rbind(subscriptions0,subscriptions1)
 ## We should have only one unique email address per row
 stopifnot(length(unique(subscriptions$Email.Address))==nrow(subscriptions))
+subscriptions$name1<-paste(toupper(subscriptions$First.Name),toupper(subscriptions$Last.Name))
+write.csv(subscriptions,file="subscriptions.csv")
 ```
 
 Second, import the design information:
 ```{r}
-rand <- read.csv("01 mos_email_addresses.20150508122202 - randomized to MC&FP 18 NOV (2).csv",as.is=TRUE,header=TRUE)
+rand <- read.csv("01 mos_email_addresses.20150508122202 - randomized to MC&FP 18 NOV (2).csv",
+		 as.is=TRUE,header=TRUE)
 stopifnot(length(unique(rand$Email.Address))==nrow(rand))
-
+row.names(rand)<-rand$Email.Address
 ```
 
-Third, generate hashes. The idea is to create a unique identifier for each person. Since email addresses were used originally for this purpose, and we have shown that they are, in fact, unique, we'll try to convert them into some format that retains their uniqueness but from which the emails themselves cannot (basically ever) be recovered.
+Then, import an additional file containing last name and first name and email
+address. The challenge of this study is that the outcome variable ---
+subscription --- is measured in a different file, that is not directly
+connected with the file telling us who was assigned to treatment within which
+block. We know the email addresses of the roughly `r nrow(subscriptions)` new
+subscriptions. And we know the email addresses to which the experimental
+treatments were sent. If people had only one email address, we would score
+those emails receiving communications that show up in the subscriptions file as
+success, and those emails not showing up in the subscriptions file as a
+failure. In fact, we think that some people who received the email subscribed
+to the newsletter using different addresses.  Those people who received an
+email in one of the treatment arms subscribed using a *different* email
+address. These people might be counted as failures *even though they are
+successes*.
+
+We assume that all of the people in the subscriptions file were sent a
+communication. So the problem is that we do not know which treatment arm some
+of these people belong to. [CHECK THIS!]
+
+Because we would like to minimize this problem, we asked for name information
+for the `r nrow(rand)` people in the original design. Since the subcription
+data includes names, we figure that we can first match on email address, but
+then try to find even partial matches on names among the unmatched emails.
+
+The following code reads in the dataset with emails and names, discovers some
+emails that are not unique -- the same email might be matched to up to 24
+names. And creates a data structure where each email address is associated with
+up to 24 names.
+
+```{r}
+## For some reason, the built in functions for reading csv files were not working.
+flnames <- data.table::fread("mos-info.20160714101854.csv",header=TRUE)
+flnames <- as.data.frame(flnames) ## we don't need the fancy data.table functionality here
+names(flnames)<-make.names(names(flnames))
+
+## Find the emails that show up more than once (they not all duplicates)
+dupemails<-names(table(flnames$Email.Address))[table(flnames$Email.Address)>1]
+stopifnot(length(dupemails)==5142) ## test if data changes
+
+## Make a dataset for thos emails which are unique.
+flnamesUniqRow<-flnames[!(flnames$Email.Address %in% dupemails),]
+stopifnot(length(unique(flnamesUniqRow$Email.Address))==nrow(flnamesUniqRow))
+flnamesUniqRow$name1<-paste(flnamesUniqRow$First.Name, flnamesUniqRow$Last.Name)
+## The names are all upper case
+stopifnot(all.equal(flnamesUniqRow$name1,toupper(flnamesUniqRow$name1)))
+row.names(flnamesUniqRow)<-flnamesUniqRow$Email.Address
+
+## Now work with the rest of the rows where we have more than one of each email address
+flnamesDups<-flnames[flnames$Email.Address %in% dupemails,]
+flnamesDups$name<-paste(flnamesDups$First.Name, flnamesDups$Last.Name)
+stopifnot(all.equal(flnamesDups$name,toupper(flnamesDups$name)))
+
+## Mostly we have duplicates, but sometimes many more
+table(table(flnamesDups$Email.Address))
+maxcol<-max(as.numeric(names(table(table(flnamesDups$Email.Address)))))
+stopifnot(maxcol==24)
+
+## Now create a dataset with unique rows for email addresses --- one row per address, but up to 24 columns of names associated with that address.
+tmplist<-lapply(split(flnamesDups,flnamesDups$Email.Address),function(dat){
+			c(unique(dat$Email.Address),dat$name,rep(NA,maxcol-length(dat$name)))
+		 })
+tmp <- as.data.frame(do.call("rbind",tmplist),stringsAsFactors=FALSE)
+names(tmp)[1]<-"Email.Address"
+names(tmp)[2:length(names(tmp))]<-paste("name",1:maxcol,sep="")
+stopifnot(length(unique(tmp$Email.Address))==nrow(tmp))
+
+## Now get combine the two datasets by stacking them on top of each other.
+flnamesUniqRow[,paste("name",2:maxcol,sep="")]<-NA
+flnamesFinal<-rbind(flnamesUniqRow[,3:ncol(flnamesUniqRow)],tmp)
+stopifnot(length(unique(flnamesFinal$Email.Address))==nrow(flnamesFinal))
+row.names(flnamesFinal)<-flnamesFinal$Email.Address
+## Now remove emails that are not in rand
+length(setdiff(row.names(rand),row.names(flnamesFinal)))
+
+randPlusNames<-merge(rand,flnamesFinal,all.x=TRUE)
+str(randPlusNames)
+head(randPlusNames)
+
+write.csv(randPlusNames,file="randPlusNames.csv")
+```
+
+# Hash
+
+So, now we have a file with unique names. Now we'll convert them to hashes.
+The idea is to create a unique identifier for each person. Since email
+addresses were used originally for this purpose, and we have shown that they
+are, in fact, unique, we'll try to convert them into some format that retains
+their uniqueness but from which the emails themselves cannot (basically ever)
+be recovered.
 
 For example, here is how hashes work:
 ```{r}
 library(openssl)
-emailaddresses <- c("jacob.bowers@gsa.gov","jwbowers@illinois.edu")
-hashedaddresses <- sha256(emailaddresses)
-cbind(hashedaddresses,emailaddresses)
+tmpstrings <- c("jacob.bowers@gsa.gov","jwbowers@illinois.edu","Jake Bowers","Jake W. Bowers")
+hashedaddresses1 <- sha256(tmpstrings) ## notice that it is not random, so the hash is reproducible
+hashedaddresses2 <- sha256(tmpstrings)
+cbind(hashedaddresses1,hashedaddresses2,tmpstrings)
 ```
 
 Now, do this for the full data. Create key files mapping emails to hashes just in case we have made a mistake or want to double check something. These files will be stored on the secure Google Drive along with the original files. Then create anonymized files that we can use to create the final analysis file.
 
 ```{r}
-subscriptions$id <- sha256(subscriptions$Email.Address)
-rand$id <- sha256(rand$Email.Address)
+subscriptions$emailhash <- sha256(subscriptions$Email.Address)
+randPlusNames$emailhash <- sha256(randPlusNames$Email.Address)
 
-randkey <- rand[,c("Email.Address","id")]
-designdata <- rand[,which(names(rand) != "Email.Address")]
+subscriptions$name1hash <- sha256(subscriptions$name1)
 
-## str(randkey)
-## str(designdata)
+for(i in grep("^name",names(randPlusNames),value=TRUE)){
+	randPlusNames[,paste(i,"hash",sep="")]<-sha256(randPlusNames[,i])
+}
+str(randPlusNames)
+head(randPlusNames)
 
-subscriptionkey <- subscriptions[,c("Email.Address","id")]
-subscriptiondata <- subscriptions[,c("id","Subscribe.Date")]
+randkey<-randPlusNames
+designdata <- randPlusNames[,c("emailhash",names(rand)[-which(names(rand)=="Email.Address")],
+			    grep("name[0-9]hash",names(randPlusNames),value=TRUE))]
 
-## str(subscriptionkey)
-## str(subscriptiondata)
+subscriptionkey <- subscriptions
+subscriptiondata <- subscriptions[,c("emailhash","name1hash","Subscribe.Date")]
 
-write.csv(subscriptionkey,file="subscriptionkey.csv")
-write.csv(randkey,file="randkey.csv")
-write.csv(subscriptiondata,file="subscriptiondata.csv")
-write.csv(designdata,file="designdata.csv")
+write.csv(subscriptionkey,row.names=FALSE,file="subscriptionkey.csv")
+write.csv(randkey,row.names=FALSE,file="randkey.csv")
+write.csv(subscriptiondata,row.names=FALSE,file="data/subscriptiondata.csv")
+write.csv(designdata,row.names=FALSE,file="data/designdata.csv")
+```
+
+
+# Merge
+
+```{r}
+
+sum(subscriptions$Email.Address %in% randPlusNames$Email.Address)
+
+finaldat <- merge(randPlusNames,subscriptions,by="Email.Address", all=TRUE,sort=FALSE)
+
+finaldat2 <- merge(designdata,subscriptiondata,all=TRUE,sort=FALSE)
+
+stopifnot(nrow(finaldat)==nrow(finaldat2))
+
 ```
