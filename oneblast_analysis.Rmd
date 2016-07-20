@@ -21,39 +21,102 @@ opts_chunk$set(eval=T,echo=F,results="hide",message=F,warning=F,cache=T)
 - Load files and libaries
 
 ```{r setup}
-#setwd("~/Documents/sbst/oneblast/")
+setwd("~/Documents/sbst/oneblast/")
 data<-read.csv("data/designdata.csv")
 subscribers<-read.csv("data/subscriptiondata.csv")
+
 ```
 
-# Check and Clean Data
+# Data
 
-- `r dim(data)[1]` participants
-- `r dim(subscribers)[1]` subscribers
-- `r sum(data$id%in%subscribers$id)` participants in list of subscribers
-    - `r dim(subscribers)[1]-sum(data$id%in%subscribers$id)` emails in list of subcriber different from emails in list of participants
+The primary dataset in this analysis contains `r dim(data)[1]` study participants, each randomly assigned to receive one of six treatment emails
+
+# Outcome
+
+The outcome is whether participants subscribed to the newsletter. It was constructed in the following way: First subscribers were identified by matching their unique email address in the design dataset to a list of  `r dim(subscribers)[1]` subscribers' emails.  Additional subscribers were identified by then matching on first and last names in each dataset. Some names appear multiple times in each dataset. These cases, where a single subscriber name is matched to multiple participants with the same name, are then recoded as zeros^[Should they be recoded as NA? Maybe a bounds analysis, randomly assigning one person as the subscriber, but perhaps not necessary]. In total, using email address and names, we are able to match `r sum(data$subscriber01==1)` participants to the list of subscribers (i.e.`r round( sum(data$subscriber01==1)/dim(subscribers)[1]*100,1)`\% of subscribers).
+
 
 ```{r clean}
-
 dim(data) # 491879 observations
-# Make sure observations are unique:
-length(unique(data$id))==dim(data)[1]
-
-dim(subscribers) # 7759 subscriptions
-
-dim(data) # 491879 observations
-dim(subscribers) # 7759 subscriptions
-sum(data$id%in%subscribers$id) # 5563 subscribers in initial email list
+# Make sure emails are unique:
+length(unique(data$emailhash))==dim(data)[1]
+length(unique(subscribers$emailhash))==dim(subscribers)[1]
 
 # Rename Treatment indicator
 names(data)[3]<-"treatment"
+
+# Create indicator for multiple names
+# Data
+multi_names<-names(which(table(data$name1hash)>1))
+data$multi_name01<-ifelse(data$name1hash%in%multi_names,1,0)
+table(data$multi_name01) # 152828 have same names
+# Subscribers
+multi_names_sub<-names(which(table(subscribers$name1hash)>1))
+subscribers$multi_name01<-ifelse(subscribers$name1hash%in%multi_names_sub,1,0)
+table(subscribers$multi_name01) # 142 have same names
+
+# Distribution of multiple names: Data
+no_of_multi<-sort(unique(table(data$name1hash)))
+counts<-hist(table(data$name1hash),plot=F,breaks=0:93)$count
+counts<-counts[counts!=0]
+tab_names_data<-cbind(c(no_of_multi,"No Name"),
+                          c(counts,sum(is.na(data$name1hash))),
+                          c(counts,sum(is.na(data$name1hash)))*c(no_of_multi,1)
+                          )
+colnames(tab_names_data)<-c("Times Name Appears","Frequency","Observations")
+# Distribution of multiple names: Subscribers
+no_of_multi_sub<-sort(unique(table(subscribers$name1hash)))
+counts_sub<-hist(table(subscribers$name1hash),breaks=0:4,plot=F)$count
+counts_sub<-counts_sub[counts_sub!=0]
+tab_names_sub<-cbind(c(no_of_multi_sub,"No Name"),
+                          c(counts_sub,sum(is.na(subscribers$name1hash))),
+                          c(counts_sub,sum(is.na(subscribers$emailhash)))*c(no_of_multi_sub,1)
+                          )
+colnames(tab_names_sub)<-c("Times Name Appears","Frequency","Observations")
+
+
+# Matches by email
+
+sum(data$emailhash%in%subscribers$emailhash) # 5563
+
+# Matches by name1hash
+sum(data$name1hash%in%subscribers$name1hash) # 7951 subscribers in 
+
+
+
 
 # Additional variables
 summary(data$Order.Within.Condition)
 table(data$Condition.Order.Within.Batch)
 
-# Create DV
-data$subscribe01<-ifelse(data$id%in%subscribers$id,1,0)
+# DV Coding:
+data$sub01_email<-ifelse(data$emailhash%in%subscribers$emailhash,1,0)
+table(data$sub01_email)
+sum(is.na(data$name1hash[data$sub01_email==1]))
+# None of the matched emails have hashed names
+data$sub01_name<-ifelse(data$name1hash%in%subscribers$name1hash,1,0)
+table(data$sub01_name) # 7951 matches
+# Nearly all of the hashed names are matched 
+
+table(data$sub01_name,data$multi_name01) # 1700 are unique indivudals, 6251 are multipele cases
+
+
+
+data$sub01_emailname<-ifelse(data$emailhash%in%subscribers$emailhash|
+                                 data$name1hash%in%subscribers$name1hash[subscribers$multi_name01==0],1,0)
+
+table(data$sub01_emailname) # Over matching...
+
+# Throw names that occur more than once
+data$sub01_emailname[data$multi_name01==1]<-0
+table(data$sub01_emailname)
+table(data$sub01_emailname,data$multi_name01)
+table(data$sub01_emailname,data$sub01_email)
+
+# Use this as the primary DV
+
+
+data$subscribe01<-data$sub01_emailname
 # Reorder as factor for prop tests
 data$subscribe<-ifelse(data$subscribe01==1,"Subscribed","Not Subscribed")
 data$subscribe<-factor(data$subscribe,levels=c("Subscribed","Not Subscribed"))
@@ -72,12 +135,24 @@ kable(tab0)
 
 # Comparisons Across Newsletters
 
+```{r pwcomp}
+# Holm
+pw_props_holm<-with(data,pairwise.prop.test(table(treatment,subscribe01)[,c(2,1)],
+                                       p.adjust.method = "holm"
+                                       ))
+# No correction
+pw_props_none<-with(data,pairwise.prop.test(table(treatment,subscribe01)[,c(2,1)],
+                                       p.adjust.method = "none"
+                                       ))
+```
+
+
 The tables below show:
 
 - The raw counts and proportions of people subscribing by treatment status
-- The p-values from pairwise comparisons of these proportions with and wihtout adjustments for mutliple compairsons
+- The p-values from pairwise comparisons of these proportions using the Holm (1979) correction for multiple comparisons, as well as wihtout any adjustments.
 
-Overall subscription rates are low (~1 percent). The differences between conditions are also small (about one to two tenths of a percent). Using the Bonferroni correction for multiple comparisons, seven of the 15 comparisons are statistically significant (p<0.05). 
+Overall subscription rates are low (~1 percent). The differences between conditions are also small (about one to two tenths of a percent). Using the Holm correction for multiple comparisons, `r sum(pw_props_holm$p.value<0.05,na.rm=T)` of the 15 comparisons are statistically significant (p<0.05, 8 p<0.06, and  `r sum(pw_props_none$p.value<0.05,na.rm=T)` without adjusting for multiple comparisons). 
 
 ## Proportion Subscribing  by Treatment Status
 ```{r tab1,results="asis"}
@@ -89,17 +164,19 @@ rownames(tab1)<-c("N","Subscribed","Not Subscribed","**Proportion Subscribing**"
 kable(tab1,caption="Proprortion Subscribing by Treatment Status")
 ```
 
-## P-Values for Pairwise Comparison of Proportions (Bonferroni Correction)
+## P-Values for Pairwise Comparison of Proportions (Holm Correction)
 
 ```{r tab2,results="asis"}
 
-pw_props_bf<-with(data,pairwise.prop.test(table(treatment,subscribe01)[,c(2,1)],
-                                       p.adjust.method = "bonferroni"
-                                       ))
-pw_props_bf$p.value<-round(pw_props_bf$p.value,3)
-pw_props_bf$p.value[is.na(pw_props_bf$p.value)]<-""
-kable(pw_props_bf$p.value,
-      caption="Pairwise comparisons using Pairwise comparison of proportions (Bonferroni Correction)")
+
+
+tab_pw_props_holm<-matrix(sprintf("%.4f",round(pw_props_holm$p.value,5)),5,5)
+colnames(tab_pw_props_holm)<-colnames(pw_props_holm$p.value)
+rownames(tab_pw_props_holm)<-rownames(pw_props_holm$p.value)
+tab_pw_props_holm[tab_pw_props_holm=="NA"] <- ""
+
+kable(tab_pw_props_holm,
+      caption="Pairwise comparisons using Pairwise comparison of proportions (Holm Correction)")
 
 ```
 
@@ -107,13 +184,15 @@ kable(pw_props_bf$p.value,
 ## P-Values for Pairwise Comparison of Proportions (No Correction for Multiple Comparisons)
 
 ```{r tab3,results="asis"}
-pw_props_none<-with(data,pairwise.prop.test(table(treatment,subscribe01),
-                                       p.adjust.method = "none"
-                                       ))
-pw_props_none$p.value<-round(pw_props_none$p.value,3)
-pw_props_none$p.value[is.na(pw_props_none$p.value)]<-""
-kable(pw_props_none$p.value,
-      caption="Pairwise comparisons using Pairwise comparison of proportions (Bonferroni Correction)")
+
+tab_pw_props_none<-matrix(sprintf("%.4f",round(pw_props_none$p.value,5)),5,5)
+colnames(tab_pw_props_none)<-colnames(pw_props_none$p.value)
+rownames(tab_pw_props_none)<-rownames(pw_props_none$p.value)
+tab_pw_props_none[tab_pw_props_none=="NA"] <- ""
+
+kable(tab_pw_props_none,
+      caption="Pairwise comparisons using Pairwise comparison of proportions (Holm Correction)")
+
 
 ```
 
@@ -124,13 +203,13 @@ kable(pw_props_none$p.value,
 # Function to make tables 
 table.maker<-function(x){
     # Difference of Proportions
-     test<-prop.test(table(x,data$subscribe01)[,c(2,1)])
-     diff<-round(test$estimate[1]-test$estimate[2],5)
-     pval<-round(test$p.value,3)
+     test<-stats::prop.test(table(x,data$subscribe01)[,c(2,1)])
+     diff<- sprintf("%.4f",round(test$estimate[1]-test$estimate[2],5))
+     pval<- sprintf("%.4f",round(test$p.value,5))
     # MH Test using Batch
     mhtest<-mantelhaen.test(table(x,data$subscribe,data$Batch))
-    mhtest.pval<-round(mhtest$p.value,3)
-    mhtest.stat<-round(mhtest$statistic,3)
+    mhtest.pval<-sprintf("%.3f",round(mhtest$p.value,3))
+    mhtest.stat<-sprintf("%.3f",round(mhtest$statistic,3))
     tab<-rbind(table(x),
             table(data$subscribe,x),
             paste("**",round(unlist(lapply(split(data$subscribe01,f=x),mean)),4),"**",sep=""),c(" "," "),
@@ -172,6 +251,7 @@ data$treat_bdf_01<-as.numeric(grepl("B|D|F",data$treatment))
 data$treat_bdf<-ifelse(grepl("B|D|F",data$treatment),"Enhanced Active","Opt-In")
 tab_bdf<-table.maker(data$treat_bdf)
 kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
+
 ```
 
 # A,B,C,D versus E,F (a test of Block of 10 present versus active)
@@ -185,6 +265,7 @@ data$treat_abcd<-factor(data$treat_abcd,levels=c("Present","Absent"))
 tab_abcd<-table.maker(data$treat_abcd)
 kable(tab_abcd,caption="Block of 10 Present or Absent")
 
+
 ```
 
 # A,B versus C,D (a test of list versus quiz format)
@@ -196,10 +277,23 @@ data$treat_ab_01<-as.numeric(grepl("A|B",data$treatment))
 data$treat_ab_01[!grepl("A|B|C|D",data$treatment)]<-NA
 data$treat_ab<-ifelse(data$treat_ab_01==1,"List","Quiz")
 
-
 tab_ab<-table.maker(data$treat_ab)
 kable(tab_ab)
 
+```
+
+# Instances of Multiple Names
+
+## Design Data
+
+```{r, results="asis"}
+kable(tab_names_data)
+```
+
+## Subscriber Data
+
+```{r, results="asis"}
+kable(tab_names_sub)
 ```
 
 
@@ -210,6 +304,7 @@ kable(tab_ab)
 <<setup>>
 <<clean>>
 <<ra>>
+<<pwcomp>>
 <<tab1>>
 <<tab2>>
 <<tab3>>

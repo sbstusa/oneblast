@@ -124,17 +124,22 @@ $(document).ready(function () {
 <div id="TOC">
 <ul>
 <li><a href="#setup">Setup</a></li>
-<li><a href="#check-and-clean-data">Check and Clean Data</a></li>
+<li><a href="#data">Data</a></li>
+<li><a href="#outcome">Outcome</a></li>
 <li><a href="#randomization-assessment">Randomization Assessment</a></li>
 <li><a href="#comparisons-across-newsletters">Comparisons Across Newsletters</a><ul>
 <li><a href="#proportion-subscribing-by-treatment-status">Proportion Subscribing by Treatment Status</a></li>
-<li><a href="#p-values-for-pairwise-comparison-of-proportions-bonferroni-correction">P-Values for Pairwise Comparison of Proportions (Bonferroni Correction)</a></li>
+<li><a href="#p-values-for-pairwise-comparison-of-proportions-holm-correction">P-Values for Pairwise Comparison of Proportions (Holm Correction)</a></li>
 <li><a href="#p-values-for-pairwise-comparison-of-proportions-no-correction-for-multiple-comparisons">P-Values for Pairwise Comparison of Proportions (No Correction for Multiple Comparisons)</a></li>
 </ul></li>
 <li><a href="#comparisons-across-treatment-type">Comparisons Across Treatment Type</a></li>
 <li><a href="#ace-versus-bdf-a-test-of-opt-in-versus-enhanced-active.">A,C,E versus B,D,F (a test of opt-in versus enhanced active).</a></li>
 <li><a href="#abcd-versus-ef-a-test-of-block-of-10-present-versus-active">A,B,C,D versus E,F (a test of Block of 10 present versus active)</a></li>
 <li><a href="#ab-versus-cd-a-test-of-list-versus-quiz-format">A,B versus C,D (a test of list versus quiz format)</a></li>
+<li><a href="#instances-of-multiple-names">Instances of Multiple Names</a><ul>
+<li><a href="#design-data">Design Data</a></li>
+<li><a href="#subscriber-data">Subscriber Data</a></li>
+</ul></li>
 <li><a href="#code">Code</a></li>
 </ul>
 </div>
@@ -147,16 +152,13 @@ $(document).ready(function () {
 <li>Load files and libaries</li>
 </ul>
 </div>
-<div id="check-and-clean-data" class="section level1">
-<h1>Check and Clean Data</h1>
-<ul>
-<li>491879 participants</li>
-<li>7759 subscribers</li>
-<li>5563 participants in list of subscribers
-<ul>
-<li>2196 emails in list of subcriber different from emails in list of participants</li>
-</ul></li>
-</ul>
+<div id="data" class="section level1">
+<h1>Data</h1>
+<p>The primary dataset in this analysis contains 491879 study participants, each randomly assigned to receive one of six treatment emails</p>
+</div>
+<div id="outcome" class="section level1">
+<h1>Outcome</h1>
+<p>The outcome is whether participants subscribed to the newsletter. It was constructed in the following way: First subscribers were identified by matching their unique email address in the design dataset to a list of 7759 subscribers’ emails. Additional subscribers were identified by then matching on first and last names in each dataset. Some names appear multiple times in each dataset. These cases, where a single subscriber name is matched to multiple participants with the same name, are then recoded as zeros<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>. In total, using email address and names, we are able to match 0 participants to the list of subscribers (i.e.0% of subscribers).</p>
 </div>
 <div id="randomization-assessment" class="section level1">
 <h1>Randomization Assessment</h1>
@@ -203,9 +205,9 @@ $(document).ready(function () {
 <p>The tables below show:</p>
 <ul>
 <li>The raw counts and proportions of people subscribing by treatment status</li>
-<li>The p-values from pairwise comparisons of these proportions with and wihtout adjustments for mutliple compairsons</li>
+<li>The p-values from pairwise comparisons of these proportions using the Holm (1979) correction for multiple comparisons, as well as wihtout any adjustments.</li>
 </ul>
-<p>Overall subscription rates are low (~1 percent). The differences between conditions are also small (about one to two tenths of a percent). Using the Bonferroni correction for multiple comparisons, seven of the 15 comparisons are statistically significant (p&lt;0.05).</p>
+<p>Overall subscription rates are low (~1 percent). The differences between conditions are also small (about one to two tenths of a percent). Using the Holm correction for multiple comparisons, 7 of the 15 comparisons are statistically significant (p&lt;0.05, 8 p&lt;0.06, and 9 without adjusting for multiple comparisons).</p>
 <div id="proportion-subscribing-by-treatment-status" class="section level2">
 <h2>Proportion Subscribing by Treatment Status</h2>
 <table>
@@ -233,38 +235,38 @@ $(document).ready(function () {
 </tr>
 <tr class="even">
 <td align="left">Subscribed</td>
-<td align="left">846</td>
-<td align="left">1014</td>
-<td align="left">819</td>
-<td align="left">876</td>
-<td align="left">906</td>
-<td align="left">1102</td>
+<td align="left">1156</td>
+<td align="left">1280</td>
+<td align="left">1070</td>
+<td align="left">1127</td>
+<td align="left">1200</td>
+<td align="left">1424</td>
 </tr>
 <tr class="odd">
 <td align="left">Not Subscribed</td>
-<td align="left">81134</td>
-<td align="left">80966</td>
-<td align="left">81161</td>
-<td align="left">81104</td>
-<td align="left">81074</td>
-<td align="left">80877</td>
+<td align="left">80824</td>
+<td align="left">80700</td>
+<td align="left">80910</td>
+<td align="left">80853</td>
+<td align="left">80780</td>
+<td align="left">80555</td>
 </tr>
 <tr class="even">
 <td align="left"><strong>Proportion Subscribing</strong></td>
-<td align="left"><strong>0.0103</strong></td>
-<td align="left"><strong>0.0124</strong></td>
-<td align="left"><strong>0.01</strong></td>
-<td align="left"><strong>0.0107</strong></td>
-<td align="left"><strong>0.0111</strong></td>
-<td align="left"><strong>0.0134</strong></td>
+<td align="left"><strong>0.0141</strong></td>
+<td align="left"><strong>0.0156</strong></td>
+<td align="left"><strong>0.0131</strong></td>
+<td align="left"><strong>0.0137</strong></td>
+<td align="left"><strong>0.0146</strong></td>
+<td align="left"><strong>0.0174</strong></td>
 </tr>
 </tbody>
 </table>
 </div>
-<div id="p-values-for-pairwise-comparison-of-proportions-bonferroni-correction" class="section level2">
-<h2>P-Values for Pairwise Comparison of Proportions (Bonferroni Correction)</h2>
+<div id="p-values-for-pairwise-comparison-of-proportions-holm-correction" class="section level2">
+<h2>P-Values for Pairwise Comparison of Proportions (Holm Correction)</h2>
 <table>
-<caption>Pairwise comparisons using Pairwise comparison of proportions (Bonferroni Correction)</caption>
+<caption>Pairwise comparisons using Pairwise comparison of proportions (Holm Correction)</caption>
 <thead>
 <tr class="header">
 <th align="left"></th>
@@ -278,7 +280,7 @@ $(document).ready(function () {
 <tbody>
 <tr class="odd">
 <td align="left">B</td>
-<td align="left">0.001</td>
+<td align="left">0.0843</td>
 <td align="left"></td>
 <td align="left"></td>
 <td align="left"></td>
@@ -286,35 +288,35 @@ $(document).ready(function () {
 </tr>
 <tr class="even">
 <td align="left">C</td>
-<td align="left">1</td>
-<td align="left">0</td>
+<td align="left">0.4181</td>
+<td align="left">0.0001</td>
 <td align="left"></td>
 <td align="left"></td>
 <td align="left"></td>
 </tr>
 <tr class="odd">
 <td align="left">D</td>
-<td align="left">1</td>
-<td align="left">0.023</td>
-<td align="left">1</td>
+<td align="left">0.7444</td>
+<td align="left">0.0180</td>
+<td align="left">0.6871</td>
 <td align="left"></td>
 <td align="left"></td>
 </tr>
 <tr class="even">
 <td align="left">E</td>
-<td align="left">1</td>
-<td align="left">0.211</td>
-<td align="left">0.561</td>
-<td align="left">1</td>
+<td align="left">0.7444</td>
+<td align="left">0.5497</td>
+<td align="left">0.0512</td>
+<td align="left">0.5497</td>
 <td align="left"></td>
 </tr>
 <tr class="odd">
 <td align="left">F</td>
-<td align="left">0</td>
-<td align="left">0.854</td>
-<td align="left">0</td>
-<td align="left">0</td>
-<td align="left">0</td>
+<td align="left">0.0000</td>
+<td align="left">0.0499</td>
+<td align="left">0.0000</td>
+<td align="left">0.0000</td>
+<td align="left">0.0001</td>
 </tr>
 </tbody>
 </table>
@@ -322,7 +324,7 @@ $(document).ready(function () {
 <div id="p-values-for-pairwise-comparison-of-proportions-no-correction-for-multiple-comparisons" class="section level2">
 <h2>P-Values for Pairwise Comparison of Proportions (No Correction for Multiple Comparisons)</h2>
 <table>
-<caption>Pairwise comparisons using Pairwise comparison of proportions (Bonferroni Correction)</caption>
+<caption>Pairwise comparisons using Pairwise comparison of proportions (Holm Correction)</caption>
 <thead>
 <tr class="header">
 <th align="left"></th>
@@ -336,7 +338,7 @@ $(document).ready(function () {
 <tbody>
 <tr class="odd">
 <td align="left">B</td>
-<td align="left">0</td>
+<td align="left">0.0120</td>
 <td align="left"></td>
 <td align="left"></td>
 <td align="left"></td>
@@ -344,35 +346,35 @@ $(document).ready(function () {
 </tr>
 <tr class="even">
 <td align="left">C</td>
-<td align="left">0.522</td>
-<td align="left">0</td>
+<td align="left">0.0697</td>
+<td align="left">0.0000</td>
 <td align="left"></td>
 <td align="left"></td>
 <td align="left"></td>
 </tr>
 <tr class="odd">
 <td align="left">D</td>
-<td align="left">0.482</td>
-<td align="left">0.002</td>
-<td align="left">0.172</td>
+<td align="left">0.5551</td>
+<td align="left">0.0018</td>
+<td align="left">0.2290</td>
 <td align="left"></td>
 <td align="left"></td>
 </tr>
 <tr class="even">
 <td align="left">E</td>
-<td align="left">0.156</td>
-<td align="left">0.014</td>
-<td align="left">0.037</td>
-<td align="left">0.49</td>
+<td align="left">0.3722</td>
+<td align="left">0.1099</td>
+<td align="left">0.0064</td>
+<td align="left">0.1328</td>
 <td align="left"></td>
 </tr>
 <tr class="odd">
 <td align="left">F</td>
-<td align="left">0</td>
-<td align="left">0.057</td>
-<td align="left">0</td>
-<td align="left">0</td>
-<td align="left">0</td>
+<td align="left">0.0000</td>
+<td align="left">0.0056</td>
+<td align="left">0.0000</td>
+<td align="left">0.0000</td>
+<td align="left">0.0000</td>
 </tr>
 </tbody>
 </table>
@@ -418,18 +420,18 @@ $(document).ready(function () {
 </tr>
 <tr class="even">
 <td align="left">Subscribed</td>
-<td align="left">2992</td>
-<td align="left">2571</td>
+<td align="left">3831</td>
+<td align="left">3426</td>
 </tr>
 <tr class="odd">
 <td align="left">Not Subscribed</td>
-<td align="left">242947</td>
-<td align="left">243369</td>
+<td align="left">242108</td>
+<td align="left">242514</td>
 </tr>
 <tr class="even">
 <td align="left">Proportion Subscribing</td>
-<td align="left"><strong>0.0122</strong></td>
-<td align="left"><strong>0.0105</strong></td>
+<td align="left"><strong>0.0156</strong></td>
+<td align="left"><strong>0.0139</strong></td>
 </tr>
 <tr class="odd">
 <td align="left">___</td>
@@ -443,13 +445,13 @@ $(document).ready(function () {
 </tr>
 <tr class="odd">
 <td align="left">Difference in Proportions</td>
-<td align="left">0.00171</td>
-<td align="left">0</td>
+<td align="left">0.0016</td>
+<td align="left">0.0000</td>
 </tr>
 <tr class="even">
 <td align="left">CMH <span class="math inline">\(\chi^2\)</span> Test</td>
-<td align="left">32.076</td>
-<td align="left">0</td>
+<td align="left">22.831</td>
+<td align="left">0.000</td>
 </tr>
 </tbody>
 </table>
@@ -473,18 +475,18 @@ $(document).ready(function () {
 </tr>
 <tr class="even">
 <td align="left">Subscribed</td>
-<td align="left">3555</td>
-<td align="left">2008</td>
+<td align="left">4633</td>
+<td align="left">2624</td>
 </tr>
 <tr class="odd">
 <td align="left">Not Subscribed</td>
-<td align="left">324365</td>
-<td align="left">161951</td>
+<td align="left">323287</td>
+<td align="left">161335</td>
 </tr>
 <tr class="even">
 <td align="left">Proportion Subscribing</td>
-<td align="left"><strong>0.0108</strong></td>
-<td align="left"><strong>0.0122</strong></td>
+<td align="left"><strong>0.0141</strong></td>
+<td align="left"><strong>0.016</strong></td>
 </tr>
 <tr class="odd">
 <td align="left">___</td>
@@ -498,13 +500,13 @@ $(document).ready(function () {
 </tr>
 <tr class="odd">
 <td align="left">Difference in Proportions</td>
-<td align="left">-0.00141</td>
-<td align="left">0</td>
+<td align="left">-0.0019</td>
+<td align="left">0.0000</td>
 </tr>
 <tr class="even">
 <td align="left">CMH <span class="math inline">\(\chi^2\)</span> Test</td>
-<td align="left">19.197</td>
-<td align="left">0</td>
+<td align="left">26.325</td>
+<td align="left">0.000</td>
 </tr>
 </tbody>
 </table>
@@ -527,18 +529,18 @@ $(document).ready(function () {
 </tr>
 <tr class="even">
 <td align="left">Subscribed</td>
-<td align="left">1860</td>
-<td align="left">1695</td>
+<td align="left">2436</td>
+<td align="left">2197</td>
 </tr>
 <tr class="odd">
 <td align="left">Not Subscribed</td>
-<td align="left">162100</td>
-<td align="left">162265</td>
+<td align="left">161524</td>
+<td align="left">161763</td>
 </tr>
 <tr class="even">
 <td align="left">Proportion Subscribing</td>
-<td align="left"><strong>0.0113</strong></td>
-<td align="left"><strong>0.0103</strong></td>
+<td align="left"><strong>0.0149</strong></td>
+<td align="left"><strong>0.0134</strong></td>
 </tr>
 <tr class="odd">
 <td align="left">___</td>
@@ -552,50 +554,464 @@ $(document).ready(function () {
 </tr>
 <tr class="odd">
 <td align="left">Difference in Proportions</td>
-<td align="left">0.00101</td>
-<td align="left">0.006</td>
+<td align="left">0.0015</td>
+<td align="left">0.0004</td>
 </tr>
 <tr class="even">
 <td align="left">CMH <span class="math inline">\(\chi^2\)</span> Test</td>
-<td align="left">7.649</td>
-<td align="left">0.006</td>
+<td align="left">12.402</td>
+<td align="left">0.000</td>
 </tr>
 </tbody>
 </table>
+</div>
+<div id="instances-of-multiple-names" class="section level1">
+<h1>Instances of Multiple Names</h1>
+<div id="design-data" class="section level2">
+<h2>Design Data</h2>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Times Name Appears</th>
+<th align="left">Frequency</th>
+<th align="left">Observations</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">1</td>
+<td align="left">329240</td>
+<td align="left">329240</td>
+</tr>
+<tr class="even">
+<td align="left">2</td>
+<td align="left">40015</td>
+<td align="left">80030</td>
+</tr>
+<tr class="odd">
+<td align="left">3</td>
+<td align="left">8414</td>
+<td align="left">25242</td>
+</tr>
+<tr class="even">
+<td align="left">4</td>
+<td align="left">2992</td>
+<td align="left">11968</td>
+</tr>
+<tr class="odd">
+<td align="left">5</td>
+<td align="left">1480</td>
+<td align="left">7400</td>
+</tr>
+<tr class="even">
+<td align="left">6</td>
+<td align="left">850</td>
+<td align="left">5100</td>
+</tr>
+<tr class="odd">
+<td align="left">7</td>
+<td align="left">524</td>
+<td align="left">3668</td>
+</tr>
+<tr class="even">
+<td align="left">8</td>
+<td align="left">345</td>
+<td align="left">2760</td>
+</tr>
+<tr class="odd">
+<td align="left">9</td>
+<td align="left">252</td>
+<td align="left">2268</td>
+</tr>
+<tr class="even">
+<td align="left">10</td>
+<td align="left">190</td>
+<td align="left">1900</td>
+</tr>
+<tr class="odd">
+<td align="left">11</td>
+<td align="left">146</td>
+<td align="left">1606</td>
+</tr>
+<tr class="even">
+<td align="left">12</td>
+<td align="left">78</td>
+<td align="left">936</td>
+</tr>
+<tr class="odd">
+<td align="left">13</td>
+<td align="left">82</td>
+<td align="left">1066</td>
+</tr>
+<tr class="even">
+<td align="left">14</td>
+<td align="left">68</td>
+<td align="left">952</td>
+</tr>
+<tr class="odd">
+<td align="left">15</td>
+<td align="left">45</td>
+<td align="left">675</td>
+</tr>
+<tr class="even">
+<td align="left">16</td>
+<td align="left">43</td>
+<td align="left">688</td>
+</tr>
+<tr class="odd">
+<td align="left">17</td>
+<td align="left">36</td>
+<td align="left">612</td>
+</tr>
+<tr class="even">
+<td align="left">18</td>
+<td align="left">33</td>
+<td align="left">594</td>
+</tr>
+<tr class="odd">
+<td align="left">19</td>
+<td align="left">18</td>
+<td align="left">342</td>
+</tr>
+<tr class="even">
+<td align="left">20</td>
+<td align="left">14</td>
+<td align="left">280</td>
+</tr>
+<tr class="odd">
+<td align="left">21</td>
+<td align="left">23</td>
+<td align="left">483</td>
+</tr>
+<tr class="even">
+<td align="left">22</td>
+<td align="left">15</td>
+<td align="left">330</td>
+</tr>
+<tr class="odd">
+<td align="left">23</td>
+<td align="left">19</td>
+<td align="left">437</td>
+</tr>
+<tr class="even">
+<td align="left">24</td>
+<td align="left">9</td>
+<td align="left">216</td>
+</tr>
+<tr class="odd">
+<td align="left">25</td>
+<td align="left">15</td>
+<td align="left">375</td>
+</tr>
+<tr class="even">
+<td align="left">26</td>
+<td align="left">13</td>
+<td align="left">338</td>
+</tr>
+<tr class="odd">
+<td align="left">27</td>
+<td align="left">6</td>
+<td align="left">162</td>
+</tr>
+<tr class="even">
+<td align="left">28</td>
+<td align="left">4</td>
+<td align="left">112</td>
+</tr>
+<tr class="odd">
+<td align="left">29</td>
+<td align="left">7</td>
+<td align="left">203</td>
+</tr>
+<tr class="even">
+<td align="left">30</td>
+<td align="left">4</td>
+<td align="left">120</td>
+</tr>
+<tr class="odd">
+<td align="left">31</td>
+<td align="left">2</td>
+<td align="left">62</td>
+</tr>
+<tr class="even">
+<td align="left">32</td>
+<td align="left">4</td>
+<td align="left">128</td>
+</tr>
+<tr class="odd">
+<td align="left">33</td>
+<td align="left">4</td>
+<td align="left">132</td>
+</tr>
+<tr class="even">
+<td align="left">34</td>
+<td align="left">1</td>
+<td align="left">34</td>
+</tr>
+<tr class="odd">
+<td align="left">35</td>
+<td align="left">4</td>
+<td align="left">140</td>
+</tr>
+<tr class="even">
+<td align="left">36</td>
+<td align="left">2</td>
+<td align="left">72</td>
+</tr>
+<tr class="odd">
+<td align="left">37</td>
+<td align="left">1</td>
+<td align="left">37</td>
+</tr>
+<tr class="even">
+<td align="left">38</td>
+<td align="left">2</td>
+<td align="left">76</td>
+</tr>
+<tr class="odd">
+<td align="left">39</td>
+<td align="left">2</td>
+<td align="left">78</td>
+</tr>
+<tr class="even">
+<td align="left">40</td>
+<td align="left">2</td>
+<td align="left">80</td>
+</tr>
+<tr class="odd">
+<td align="left">41</td>
+<td align="left">1</td>
+<td align="left">41</td>
+</tr>
+<tr class="even">
+<td align="left">42</td>
+<td align="left">1</td>
+<td align="left">42</td>
+</tr>
+<tr class="odd">
+<td align="left">43</td>
+<td align="left">2</td>
+<td align="left">86</td>
+</tr>
+<tr class="even">
+<td align="left">45</td>
+<td align="left">1</td>
+<td align="left">45</td>
+</tr>
+<tr class="odd">
+<td align="left">46</td>
+<td align="left">1</td>
+<td align="left">46</td>
+</tr>
+<tr class="even">
+<td align="left">47</td>
+<td align="left">1</td>
+<td align="left">47</td>
+</tr>
+<tr class="odd">
+<td align="left">48</td>
+<td align="left">2</td>
+<td align="left">96</td>
+</tr>
+<tr class="even">
+<td align="left">49</td>
+<td align="left">1</td>
+<td align="left">49</td>
+</tr>
+<tr class="odd">
+<td align="left">51</td>
+<td align="left">1</td>
+<td align="left">51</td>
+</tr>
+<tr class="even">
+<td align="left">52</td>
+<td align="left">1</td>
+<td align="left">52</td>
+</tr>
+<tr class="odd">
+<td align="left">53</td>
+<td align="left">1</td>
+<td align="left">53</td>
+</tr>
+<tr class="even">
+<td align="left">54</td>
+<td align="left">1</td>
+<td align="left">54</td>
+</tr>
+<tr class="odd">
+<td align="left">56</td>
+<td align="left">1</td>
+<td align="left">56</td>
+</tr>
+<tr class="even">
+<td align="left">57</td>
+<td align="left">1</td>
+<td align="left">57</td>
+</tr>
+<tr class="odd">
+<td align="left">59</td>
+<td align="left">2</td>
+<td align="left">118</td>
+</tr>
+<tr class="even">
+<td align="left">68</td>
+<td align="left">1</td>
+<td align="left">68</td>
+</tr>
+<tr class="odd">
+<td align="left">73</td>
+<td align="left">1</td>
+<td align="left">73</td>
+</tr>
+<tr class="even">
+<td align="left">92</td>
+<td align="left">1</td>
+<td align="left">92</td>
+</tr>
+<tr class="odd">
+<td align="left">No Name</td>
+<td align="left">9811</td>
+<td align="left">9811</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="subscriber-data" class="section level2">
+<h2>Subscriber Data</h2>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Times Name Appears</th>
+<th align="left">Frequency</th>
+<th align="left">Observations</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">1</td>
+<td align="left">7617</td>
+<td align="left">7617</td>
+</tr>
+<tr class="even">
+<td align="left">2</td>
+<td align="left">68</td>
+<td align="left">136</td>
+</tr>
+<tr class="odd">
+<td align="left">3</td>
+<td align="left">2</td>
+<td align="left">6</td>
+</tr>
+<tr class="even">
+<td align="left">No Name</td>
+<td align="left">0</td>
+<td align="left">0</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 <div id="code" class="section level1">
 <h1>Code</h1>
 <pre class="r"><code>library(knitr)
 opts_chunk$set(eval=T,echo=F,results=&quot;hide&quot;,message=F,warning=F,cache=T)
-#setwd(&quot;~/Documents/sbst/oneblast/&quot;)
+setwd(&quot;~/Documents/sbst/oneblast/&quot;)
 data&lt;-read.csv(&quot;data/designdata.csv&quot;)
 subscribers&lt;-read.csv(&quot;data/subscriptiondata.csv&quot;)
-
 dim(data) # 491879 observations
-# Make sure observations are unique:
-length(unique(data$id))==dim(data)[1]
-
-dim(subscribers) # 7759 subscriptions
-
-dim(data) # 491879 observations
-dim(subscribers) # 7759 subscriptions
-sum(data$id%in%subscribers$id) # 5563 subscribers in initial email list
+# Make sure emails are unique:
+length(unique(data$emailhash))==dim(data)[1]
+length(unique(subscribers$emailhash))==dim(subscribers)[1]
 
 # Rename Treatment indicator
 names(data)[3]&lt;-&quot;treatment&quot;
+
+# Create indicator for multiple names
+# Data
+multi_names&lt;-names(which(table(data$name1hash)&gt;1))
+data$multi_name01&lt;-ifelse(data$name1hash%in%multi_names,1,0)
+table(data$multi_name01) # 152828 have same names
+# Subscribers
+multi_names_sub&lt;-names(which(table(subscribers$name1hash)&gt;1))
+subscribers$multi_name01&lt;-ifelse(subscribers$name1hash%in%multi_names_sub,1,0)
+table(subscribers$multi_name01) # 142 have same names
+
+# Distribution of multiple names: Data
+no_of_multi&lt;-sort(unique(table(data$name1hash)))
+counts&lt;-hist(table(data$name1hash),plot=F,breaks=0:93)$count
+counts&lt;-counts[counts!=0]
+tab_names_data&lt;-cbind(c(no_of_multi,&quot;No Name&quot;),
+                          c(counts,sum(is.na(data$name1hash))),
+                          c(counts,sum(is.na(data$name1hash)))*c(no_of_multi,1)
+                          )
+colnames(tab_names_data)&lt;-c(&quot;Times Name Appears&quot;,&quot;Frequency&quot;,&quot;Observations&quot;)
+# Distribution of multiple names: Subscribers
+no_of_multi_sub&lt;-sort(unique(table(subscribers$name1hash)))
+counts_sub&lt;-hist(table(subscribers$name1hash),breaks=0:4,plot=F)$count
+counts_sub&lt;-counts_sub[counts_sub!=0]
+tab_names_sub&lt;-cbind(c(no_of_multi_sub,&quot;No Name&quot;),
+                          c(counts_sub,sum(is.na(subscribers$name1hash))),
+                          c(counts_sub,sum(is.na(subscribers$emailhash)))*c(no_of_multi_sub,1)
+                          )
+colnames(tab_names_sub)&lt;-c(&quot;Times Name Appears&quot;,&quot;Frequency&quot;,&quot;Observations&quot;)
+
+
+# Matches by email
+
+sum(data$emailhash%in%subscribers$emailhash) # 5563
+
+# Matches by name1hash
+sum(data$name1hash%in%subscribers$name1hash) # 7951 subscribers in 
+
+
+
 
 # Additional variables
 summary(data$Order.Within.Condition)
 table(data$Condition.Order.Within.Batch)
 
-# Create DV
-data$subscribe01&lt;-ifelse(data$id%in%subscribers$id,1,0)
+# DV Coding:
+data$sub01_email&lt;-ifelse(data$emailhash%in%subscribers$emailhash,1,0)
+table(data$sub01_email)
+sum(is.na(data$name1hash[data$sub01_email==1]))
+# None of the matched emails have hashed names
+data$sub01_name&lt;-ifelse(data$name1hash%in%subscribers$name1hash,1,0)
+table(data$sub01_name) # 7951 matches
+# Nearly all of the hashed names are matched 
+
+table(data$sub01_name,data$multi_name01) # 1700 are unique indivudals, 6251 are multipele cases
+
+
+
+data$sub01_emailname&lt;-ifelse(data$emailhash%in%subscribers$emailhash|
+                                 data$name1hash%in%subscribers$name1hash[subscribers$multi_name01==0],1,0)
+
+table(data$sub01_emailname) # Over matching...
+
+# Throw names that occur more than once
+data$sub01_emailname[data$multi_name01==1]&lt;-0
+table(data$sub01_emailname)
+table(data$sub01_emailname,data$multi_name01)
+table(data$sub01_emailname,data$sub01_email)
+
+# Use this as the primary DV
+
+
+data$subscribe01&lt;-data$sub01_emailname
 # Reorder as factor for prop tests
 data$subscribe&lt;-ifelse(data$subscribe01==1,&quot;Subscribed&quot;,&quot;Not Subscribed&quot;)
 data$subscribe&lt;-factor(data$subscribe,levels=c(&quot;Subscribed&quot;,&quot;Not Subscribed&quot;))
 tab0&lt;-data.frame(Treatement=names(table(data$treatment)),
                                   N=matrix(table(data$treatment)))
 kable(tab0)
+# Holm
+pw_props_holm&lt;-with(data,pairwise.prop.test(table(treatment,subscribe01)[,c(2,1)],
+                                       p.adjust.method = &quot;holm&quot;
+                                       ))
+# No correction
+pw_props_none&lt;-with(data,pairwise.prop.test(table(treatment,subscribe01)[,c(2,1)],
+                                       p.adjust.method = &quot;none&quot;
+                                       ))
 # Proportion Subscribing by Treatment
 tab1&lt;-rbind(table(data$treatment),
             table(data$subscribe,data$treatment),
@@ -603,30 +1019,34 @@ tab1&lt;-rbind(table(data$treatment),
 rownames(tab1)&lt;-c(&quot;N&quot;,&quot;Subscribed&quot;,&quot;Not Subscribed&quot;,&quot;**Proportion Subscribing**&quot;)
 kable(tab1,caption=&quot;Proprortion Subscribing by Treatment Status&quot;)
 
-pw_props_bf&lt;-with(data,pairwise.prop.test(table(treatment,subscribe01)[,c(2,1)],
-                                       p.adjust.method = &quot;bonferroni&quot;
-                                       ))
-pw_props_bf$p.value&lt;-round(pw_props_bf$p.value,3)
-pw_props_bf$p.value[is.na(pw_props_bf$p.value)]&lt;-&quot;&quot;
-kable(pw_props_bf$p.value,
-      caption=&quot;Pairwise comparisons using Pairwise comparison of proportions (Bonferroni Correction)&quot;)
-pw_props_none&lt;-with(data,pairwise.prop.test(table(treatment,subscribe01),
-                                       p.adjust.method = &quot;none&quot;
-                                       ))
-pw_props_none$p.value&lt;-round(pw_props_none$p.value,3)
-pw_props_none$p.value[is.na(pw_props_none$p.value)]&lt;-&quot;&quot;
-kable(pw_props_none$p.value,
-      caption=&quot;Pairwise comparisons using Pairwise comparison of proportions (Bonferroni Correction)&quot;)
+
+
+tab_pw_props_holm&lt;-matrix(sprintf(&quot;%.4f&quot;,round(pw_props_holm$p.value,5)),5,5)
+colnames(tab_pw_props_holm)&lt;-colnames(pw_props_holm$p.value)
+rownames(tab_pw_props_holm)&lt;-rownames(pw_props_holm$p.value)
+tab_pw_props_holm[tab_pw_props_holm==&quot;NA&quot;] &lt;- &quot;&quot;
+
+kable(tab_pw_props_holm,
+      caption=&quot;Pairwise comparisons using Pairwise comparison of proportions (Holm Correction)&quot;)
+
+tab_pw_props_none&lt;-matrix(sprintf(&quot;%.4f&quot;,round(pw_props_none$p.value,5)),5,5)
+colnames(tab_pw_props_none)&lt;-colnames(pw_props_none$p.value)
+rownames(tab_pw_props_none)&lt;-rownames(pw_props_none$p.value)
+tab_pw_props_none[tab_pw_props_none==&quot;NA&quot;] &lt;- &quot;&quot;
+
+kable(tab_pw_props_none,
+      caption=&quot;Pairwise comparisons using Pairwise comparison of proportions (Holm Correction)&quot;)
+
 # Function to make tables 
 table.maker&lt;-function(x){
     # Difference of Proportions
-     test&lt;-prop.test(table(x,data$subscribe01)[,c(2,1)])
-     diff&lt;-round(test$estimate[1]-test$estimate[2],5)
-     pval&lt;-round(test$p.value,3)
+     test&lt;-stats::prop.test(table(x,data$subscribe01)[,c(2,1)])
+     diff&lt;- sprintf(&quot;%.4f&quot;,round(test$estimate[1]-test$estimate[2],5))
+     pval&lt;- sprintf(&quot;%.4f&quot;,round(test$p.value,5))
     # MH Test using Batch
     mhtest&lt;-mantelhaen.test(table(x,data$subscribe,data$Batch))
-    mhtest.pval&lt;-round(mhtest$p.value,3)
-    mhtest.stat&lt;-round(mhtest$statistic,3)
+    mhtest.pval&lt;-sprintf(&quot;%.3f&quot;,round(mhtest$p.value,3))
+    mhtest.stat&lt;-sprintf(&quot;%.3f&quot;,round(mhtest$statistic,3))
     tab&lt;-rbind(table(x),
             table(data$subscribe,x),
             paste(&quot;**&quot;,round(unlist(lapply(split(data$subscribe01,f=x),mean)),4),&quot;**&quot;,sep=&quot;&quot;),c(&quot; &quot;,&quot; &quot;),
@@ -652,15 +1072,21 @@ data$treat_abcd&lt;-ifelse(grepl(&quot;A|B|C|D&quot;,data$treatment),&quot;Prese
 data$treat_abcd&lt;-factor(data$treat_abcd,levels=c(&quot;Present&quot;,&quot;Absent&quot;))
 tab_abcd&lt;-table.maker(data$treat_abcd)
 kable(tab_abcd,caption=&quot;Block of 10 Present or Absent&quot;)
+
 # A,B versus C,D (a test of list versus quiz format)
 
 data$treat_ab_01&lt;-as.numeric(grepl(&quot;A|B&quot;,data$treatment))
 data$treat_ab_01[!grepl(&quot;A|B|C|D&quot;,data$treatment)]&lt;-NA
 data$treat_ab&lt;-ifelse(data$treat_ab_01==1,&quot;List&quot;,&quot;Quiz&quot;)
 
-
 tab_ab&lt;-table.maker(data$treat_ab)
 kable(tab_ab)</code></pre>
+</div>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>Should they be recoded as NA? Maybe a bounds analysis, randomly assigning one person as the subscriber, but perhaps not necessary<a href="#fnref1">↩</a></p></li>
+</ol>
 </div>
 
 
