@@ -155,10 +155,18 @@ $(document).ready(function () {
 <div id="data" class="section level1">
 <h1>Data</h1>
 <p>The primary dataset in this analysis contains 491879 study participants, each randomly assigned to receive one of six treatment emails</p>
+<ul>
+<li>491879 participants</li>
+<li>7759 subscribers</li>
+<li>5563 participants in list of subscribers
+<ul>
+<li>2196 emails in list of subcriber different from emails in list of participants</li>
+</ul></li>
+</ul>
 </div>
 <div id="outcome" class="section level1">
 <h1>Outcome</h1>
-<p>The outcome is whether participants subscribed to the newsletter. It was constructed in the following way: First subscribers were identified by matching their unique email address in the design dataset to a list of 7759 subscribers’ emails. Additional subscribers were identified by then matching on first and last names in each dataset. Some names appear multiple times in each dataset. These cases, where a single subscriber name is matched to multiple participants with the same name, are then recoded as zeros<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>. In total, using email address and names, we are able to match 0 participants to the list of subscribers (i.e.0% of subscribers).</p>
+<p>The outcome is whether participants subscribed to the newsletter. It was constructed in the following way: First subscribers were identified by matching their unique email address in the design dataset to a list of 7759 subscribers’ emails. Additional subscribers were identified by then matching on first and last names in each dataset. Some names appear multiple times in each dataset. These cases, where a single subscriber name is matched to multiple participants with the same name, are then recoded as zeros<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>. In total, using email address and names, we are able to match 7257 participants to the list of subscribers (i.e. 93.5% of subscribers).</p>
 </div>
 <div id="randomization-assessment" class="section level1">
 <h1>Randomization Assessment</h1>
@@ -915,13 +923,16 @@ $(document).ready(function () {
 <h1>Code</h1>
 <pre class="r"><code>library(knitr)
 opts_chunk$set(eval=T,echo=F,results=&quot;hide&quot;,message=F,warning=F,cache=T)
-setwd(&quot;~/Documents/sbst/oneblast/&quot;)
 data&lt;-read.csv(&quot;data/designdata.csv&quot;)
 subscribers&lt;-read.csv(&quot;data/subscriptiondata.csv&quot;)
 dim(data) # 491879 observations
+
 # Make sure emails are unique:
 length(unique(data$emailhash))==dim(data)[1]
 length(unique(subscribers$emailhash))==dim(subscribers)[1]
+
+dim(subscribers) # 7759 subscriptions
+sum(data$emailhash%in%subscribers$emailhash) # 5563 subscribers in initial email list
 
 # Rename Treatment indicator
 names(data)[3]&lt;-&quot;treatment&quot;
@@ -970,6 +981,7 @@ sum(data$name1hash%in%subscribers$name1hash) # 7951 subscribers in
 summary(data$Order.Within.Condition)
 table(data$Condition.Order.Within.Batch)
 
+
 # DV Coding:
 data$sub01_email&lt;-ifelse(data$emailhash%in%subscribers$emailhash,1,0)
 table(data$sub01_email)
@@ -996,8 +1008,9 @@ table(data$sub01_emailname,data$sub01_email)
 
 # Use this as the primary DV
 
-
 data$subscribe01&lt;-data$sub01_emailname
+
+
 # Reorder as factor for prop tests
 data$subscribe&lt;-ifelse(data$subscribe01==1,&quot;Subscribed&quot;,&quot;Not Subscribed&quot;)
 data$subscribe&lt;-factor(data$subscribe,levels=c(&quot;Subscribed&quot;,&quot;Not Subscribed&quot;))
