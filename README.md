@@ -15,6 +15,10 @@ The source code is in R markdown format. To recreate our analysis (shown here in
 
 
 
+# Process
+
+We wrote up a plan for analysis using Google Docs to enable easy commenting and group editing. Once we had a more or less final version, we downloaded it as .docx format and then converted this to github flavored markdown so that it could be posted publically online: `pandoc -f docx -t markdown_github AnalysisPlan.docx -o AnalysisPlan.md`.
+
  
 
 
