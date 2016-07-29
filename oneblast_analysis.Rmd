@@ -130,9 +130,26 @@ stopifnot(sum(!is.na(bigdat$sdat))==5563)
 tmp<-subscribers[setdiff(row.names(subscribers),matchedemails),]
 stopifnot(nrow(subscribers)==( sum(!is.na(bigdat$sdat))+nrow(tmp) ))
 ## How many unique names are left after the email based matching?
-subscribersUniqNameUnmatched<-
+tmp$dups <- tmp$name1hash %in% names(table(tmp$name1hash)[table(tmp$name1hash)>1])
+subdat<-tmp[!tmp$dups,]
 
+# Verify no overlap between email addresses
+stopifnot( sum(subdat$emailhash %in% bigdat$emailhash) == 0)
 
+## Merge based on name1 for the rows in bigdat without email based matches
+
+### One issue is that we duplicates: There are 881 unique names in this group, but there are 232 cases with two names in bigdat that match at least one name in tmp. So, here, continue to work with unique names.
+table(table(bigdat$name1hash[is.na(bigdat$sdat) & (bigdat$name1hash %in% tmp$name1hash)]))
+tmptab<-table(bigdat$name1hash[is.na(bigdat$sdat) & (bigdat$name1hash %in% tmp$name1hash)])
+
+## Take people in bigdat with unique names that exist in subscribers.
+### Problem here is that we don't really know if a "Jake Bowers" in both datasets is the same person. We only know that "Jake Bowers" only appeared once in each dataset and that the email addresses of Jake Bowers do not match between the two.
+
+bigdat$uniqueoverlapname1 <- bigdat$name1hash %in% names(tmptab[tmptab==1])
+
+bigdat2<-merge(bigdat,subdat[subdat$name1hash %in% names(tmptab[tmptab==1]),],by="name1hash",all.x=TRUE,sort=FALSE)
+stopifnot(nrow(bigdat2)==nrow(wrkdat))
+bigdat2$sdate2 <- ifelse(is.na(bigdat2$sdate),bigdat2$Subscribe.Date,bigdat2$sdate)
 
 
 
