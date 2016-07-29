@@ -2,9 +2,10 @@
 title: "DoD Military Community and Family Policy Military OneSource eNewsletter"
 author: "Paul Testa"
 date: "July 8, 2016"
-output: 
+output:
     html_document:
         toc: TRUE
+	template: cosmo
 ---
 
 ```{r init,echo=F}
@@ -21,44 +22,54 @@ opts_chunk$set(eval=T,echo=F,results="hide",message=F,warning=F,cache=T)
 - Load files and libaries
 
 ```{r setup}
-data<-read.csv("data/designdata.csv")
-subscribers<-read.csv("data/subscriptiondata.csv")
+wrkdat<-read.csv("data/designdata.csv",as.is=TRUE)
+subscribers<-read.csv("data/subscriptiondata.csv",as.is=TRUE)
 
 ```
 
 
 # Data
 
+First check data
+
 ```{r clean}
-dim(data) # 491879 observations
+stopifnot(nrow(wrkdat)==491879) # 491879 observations
 
 # Make sure emails are unique:
-length(unique(data$emailhash))==dim(data)[1]
-length(unique(subscribers$emailhash))==dim(subscribers)[1]
+stopifnot(length(unique(wrkdat$emailhash))==dim(data)[1])
+stopifnot(length(unique(subscribers$emailhash))==dim(subscribers)[1])
 
-dim(subscribers) # 7759 subscriptions
-sum(data$emailhash%in%subscribers$emailhash) # 5563 subscribers in initial email list
+stopifnot(nrow(subscribers)==7759) # 7759 subscriptions
+stopifnot(sum(wrkdat$emailhash%in%subscribers$emailhash)==5563) # 5563 subscribers in initial email list
 
 # Rename Treatment indicator
-names(data)[3]<-"treatment"
+names(wrkdat)[3]<-"treatment"
+```
 
+Some people share names. And this will come to be a problem for the analysis of
+this data. We engage with it below. In this section, we mostly explore the
+extent to which people share names.
+
+```{r}
 # Create indicator for multiple names
 # Data
-multi_names<-names(which(table(data$name1hash)>1))
-data$multi_name01<-ifelse(data$name1hash%in%multi_names,1,0)
-table(data$multi_name01) # 152828 have same names
+multi_names<-names(which(table(wrkdat$name1hash)>1))
+wrkdat$multi_name01<-ifelse(wrkdat$name1hash%in%multi_names,1,0)
+table(wrkdat$multi_name01) # 152828 rows share names with at least one other person
+
 # Subscribers
 multi_names_sub<-names(which(table(subscribers$name1hash)>1))
 subscribers$multi_name01<-ifelse(subscribers$name1hash%in%multi_names_sub,1,0)
-table(subscribers$multi_name01) # 142 have same names
+stopifnot(table(subscribers$multi_name01)[2]==142) # 142 rows share names with at least one other person
+table(table(subscribers$name1hash))
 
 # Distribution of multiple names: Data
-no_of_multi<-sort(unique(table(data$name1hash)))
-counts<-hist(table(data$name1hash),plot=F,breaks=0:93)$count
+no_of_multi<-sort(unique(table(wrkdat$name1hash)))
+counts<-hist(table(wrkdat$name1hash),plot=F,breaks=0:93)$count
 counts<-counts[counts!=0]
 tab_names_data<-cbind(c(no_of_multi,"No Name"),
-                          c(counts,sum(is.na(data$name1hash))),
-                          c(counts,sum(is.na(data$name1hash)))*c(no_of_multi,1)
+                          c(counts,sum(is.na(wrkdat$name1hash))),
+                          c(counts,sum(is.na(wrkdat$name1hash)))*c(no_of_multi,1)
                           )
 colnames(tab_names_data)<-c("Times Name Appears","Frequency","Observations")
 # Distribution of multiple names: Subscribers
@@ -70,55 +81,80 @@ tab_names_sub<-cbind(c(no_of_multi_sub,"No Name"),
                           c(counts_sub,sum(is.na(subscribers$emailhash)))*c(no_of_multi_sub,1)
                           )
 colnames(tab_names_sub)<-c("Times Name Appears","Frequency","Observations")
+```
 
+First, we match those sent email treatments to subscribers by email address.
 
+```{r}
 # Matches by email
-
-sum(data$emailhash%in%subscribers$emailhash) # 5563
+stopifnot(sum(wrkdat$emailhash%in%subscribers$emailhash)==5563) # 5563
 
 # Matches by name1hash
-sum(data$name1hash%in%subscribers$name1hash) # 7951 subscribers in 
-
-
-
+stopifnot(sum(wrkdat$name1hash%in%subscribers$name1hash)==7951) # 7951 subscribers in
 
 # Additional variables
-summary(data$Order.Within.Condition)
-table(data$Condition.Order.Within.Batch)
+summary(wrkdat$Order.Within.Condition)
+table(wrkdat$Condition.Order.Within.Batch)
 
 
 # DV Coding:
-data$sub01_email<-ifelse(data$emailhash%in%subscribers$emailhash,1,0)
-table(data$sub01_email)
-sum(is.na(data$name1hash[data$sub01_email==1]))
+wrkdat$sub01_email<-ifelse(wrkdat$emailhash%in%subscribers$emailhash,1,0)
+table(wrkdat$sub01_email)
+stopifnot(sum(is.na(wrkdat$name1hash[wrkdat$sub01_email==1]))==5563)
 # None of the matched emails have hashed names
-data$sub01_name<-ifelse(data$name1hash%in%subscribers$name1hash,1,0)
-table(data$sub01_name) # 7951 matches
-# Nearly all of the hashed names are matched 
+wrkdat$sub01_name<-ifelse(wrkdat$name1hash%in%subscribers$name1hash,1,0)
+table(wrkdat$sub01_name) # 7951 matches
+# Nearly all of the hashed names are matched
+table(wrkdat$sub01_name,wrkdat$multi_name01) # 1700 are unique indivudals, 6251 are multipele cases
 
-table(data$sub01_name,data$multi_name01) # 1700 are unique indivudals, 6251 are multipele cases
+## A double check
+
+### Make sure that each row is a unique email address
+stopifnot(nrow(wrkdat)==length(unique(wrkdat$emailhash)))
+stopifnot(nrow(subscribers)==length(unique(subscribers$emailhash)))
+row.names(wrkdat)<-wrkdat$emailhash
+row.names(subscribers)<-subscribers$emailhash
+
+## Make sure that Subscribe.Date has no missing values or extreme values.
+stopifnot(all(!is.na(subscribers$Subscribe.Date)))
+sort(unique(subscribers$Subscribe.Date))[1:10]
+rev(sort(unique(subscribers$Subscribe.Date)))[1:10]
+
+### First match on email addresses
+bigdat<-wrkdat
+matchedemails<-intersect(row.names(bigdat),row.names(subscribers))
+bigdat[matchedemails,"sdate"]<-subscribers[matchedemails,"Subscribe.Date"]
+stopifnot(sum(!is.na(bigdat$sdat))==5563)
+
+## The subscribers unmatched by email address
+tmp<-subscribers[setdiff(row.names(subscribers),matchedemails),]
+stopifnot(nrow(subscribers)==( sum(!is.na(bigdat$sdat))+nrow(tmp) ))
+## How many unique names are left after the email based matching?
+subscribersUniqNameUnmatched<-
 
 
 
-data$sub01_emailname<-ifelse(data$emailhash%in%subscribers$emailhash|
-                                 data$name1hash%in%subscribers$name1hash[subscribers$multi_name01==0],1,0)
 
-table(data$sub01_emailname) # Over matching...
+
+wrkdat$sub01_emailname<-ifelse(wrkdat$emailhash%in%subscribers$emailhash|
+                                 wrkdat$name1hash%in%subscribers$name1hash[subscribers$multi_name01==0],1,0)
+
+table(wrkdat$sub01_emailname) # Over matching...
 
 # Throw names that occur more than once
-data$sub01_emailname[data$multi_name01==1]<-0
-table(data$sub01_emailname)
-table(data$sub01_emailname,data$multi_name01)
-table(data$sub01_emailname,data$sub01_email)
+wrkdat$sub01_emailname[wrkdat$multi_name01==1]<-0
+table(wrkdat$sub01_emailname)
+table(wrkdat$sub01_emailname,wrkdat$multi_name01)
+table(wrkdat$sub01_emailname,wrkdat$sub01_email)
 
 # Use this as the primary DV
 
-data$subscribe01<-data$sub01_emailname
+wrkdat$subscribe01<-wrkdat$sub01_emailname
 
 
 # Reorder as factor for prop tests
-data$subscribe<-ifelse(data$subscribe01==1,"Subscribed","Not Subscribed")
-data$subscribe<-factor(data$subscribe,levels=c("Subscribed","Not Subscribed"))
+wrkdat$subscribe<-ifelse(wrkdat$subscribe01==1,"Subscribed","Not Subscribed")
+wrkdat$subscribe<-factor(wrkdat$subscribe,levels=c("Subscribed","Not Subscribed"))
 ```
 
 
@@ -126,14 +162,14 @@ The primary dataset in this analysis contains `r dim(data)[1]` study participant
 
 - `r dim(data)[1]` participants
 - `r dim(subscribers)[1]` subscribers
-- `r sum(data$emailhash%in%subscribers$emailhash)` participants in list of subscribers
-    - `r dim(subscribers)[1]-sum(data$emailhash%in%subscribers$emailhash)` emails in list of subcriber different from emails in list of participants
+- `r sum(wrkdat$emailhash%in%subscribers$emailhash)` participants in list of subscribers
+    - `r dim(subscribers)[1]-sum(wrkdat$emailhash%in%subscribers$emailhash)` emails in list of subcriber different from emails in list of participants
 
 
 # Outcome
 
 
-The outcome is whether participants subscribed to the newsletter. It was constructed in the following way: First subscribers were identified by matching their unique email address in the design dataset to a list of  `r dim(subscribers)[1]` subscribers' emails.  Additional subscribers were identified by then matching on first and last names in each dataset. Some names appear multiple times in each dataset. These cases, where a single subscriber name is matched to multiple participants with the same name, are then recoded as zeros^[Should they be recoded as NA? Maybe a bounds analysis, randomly assigning one person as the subscriber, but perhaps not necessary]. In total, using email address and names, we are able to match `r sum(data$subscribe01==1)` participants to the list of subscribers (i.e. `r round( sum(data$subscribe01==1)/dim(subscribers)[1]*100,1)`\% of subscribers).
+The outcome is whether participants subscribed to the newsletter. It was constructed in the following way: First subscribers were identified by matching their unique email address in the design dataset to a list of  `r dim(subscribers)[1]` subscribers' emails.  Additional subscribers were identified by then matching on first and last names in each dataset. Some names appear multiple times in each dataset. These cases, where a single subscriber name is matched to multiple participants with the same name, are then recoded as NA for the primary analysis. We assess the sensitivity of our results to different categorizations of the roughly 140 people who we excluded from the analysis because of unclear treatment assignment below. In total, using email address and names, we are able to match `r sum(wrkdat$subscribe01==1)` participants to the list of subscribers (i.e. `r round( sum(wrkdat$subscribe01==1)/dim(subscribers)[1]*100,1)`\% of subscribers).
 
 
 
@@ -142,12 +178,14 @@ The outcome is whether participants subscribed to the newsletter. It was constru
 # Randomization Assessment
 
 ```{r ra,results="asis"}
-tab0<-data.frame(Treatement=names(table(data$treatment)),
-                                  N=matrix(table(data$treatment)))
-kable(tab0)
+tab0<-data.frame(Treatement=names(table(wrkdat$treatment)),
+                                  N=matrix(table(wrkdat$treatment)))
+knitr::kable(tab0)
+table(wrkdat$treatment,wrkdat$Batch,exclude=c())
 ```
 
-- Treatment appears to have been administred in 82 batches of 6000 participants with the exception of batch 82, which was sent  `r table(data$Batch)[82]` recipients. 
+
+- Treatment appears to have been administred in 82 batches of 6000 participants with the exception of batch 82, which was sent  `r table(wrkdat$Batch)[82]` recipients.
 
 
 # Comparisons Across Newsletters
@@ -169,14 +207,14 @@ The tables below show:
 - The raw counts and proportions of people subscribing by treatment status
 - The p-values from pairwise comparisons of these proportions using the Holm (1979) correction for multiple comparisons, as well as wihtout any adjustments.
 
-Overall subscription rates are low (~1 percent). The differences between conditions are also small (about one to two tenths of a percent). Using the Holm correction for multiple comparisons, `r sum(pw_props_holm$p.value<0.05,na.rm=T)` of the 15 comparisons are statistically significant (p<0.05, 8 p<0.06, and  `r sum(pw_props_none$p.value<0.05,na.rm=T)` without adjusting for multiple comparisons). 
+Overall subscription rates are low (~1 percent). The differences between conditions are also small (about one to two tenths of a percent). Using the Holm correction for multiple comparisons, `r sum(pw_props_holm$p.value<0.05,na.rm=T)` of the 15 comparisons are statistically significant (p<0.05, 8 p<0.06, and  `r sum(pw_props_none$p.value<0.05,na.rm=T)` without adjusting for multiple comparisons).
 
 ## Proportion Subscribing  by Treatment Status
 ```{r tab1,results="asis"}
 # Proportion Subscribing by Treatment
-tab1<-rbind(table(data$treatment),
-            table(data$subscribe,data$treatment),
-            paste("**",round(unlist(lapply(split(data$subscribe01,f=data$treatment),mean)),4),"**",sep=""))
+tab1<-rbind(table(wrkdat$treatment),
+            table(wrkdat$subscribe,wrkdat$treatment),
+            paste("**",round(unlist(lapply(split(wrkdat$subscribe01,f=wrkdat$treatment),mean)),4),"**",sep=""))
 rownames(tab1)<-c("N","Subscribed","Not Subscribed","**Proportion Subscribing**")
 kable(tab1,caption="Proprortion Subscribing by Treatment Status")
 ```
@@ -217,27 +255,27 @@ kable(tab_pw_props_none,
 
 
 ```{r tablemaker}
-# Function to make tables 
+# Function to make tables
 table.maker<-function(x){
     # Difference of Proportions
-     test<-stats::prop.test(table(x,data$subscribe01)[,c(2,1)])
+     test<-stats::prop.test(table(x,wrkdat$subscribe01)[,c(2,1)])
      diff<- sprintf("%.4f",round(test$estimate[1]-test$estimate[2],5))
      pval<- sprintf("%.4f",round(test$p.value,5))
     # MH Test using Batch
-    mhtest<-mantelhaen.test(table(x,data$subscribe,data$Batch))
+    mhtest<-mantelhaen.test(table(x,wrkdat$subscribe,wrkdat$Batch))
     mhtest.pval<-sprintf("%.3f",round(mhtest$p.value,3))
     mhtest.stat<-sprintf("%.3f",round(mhtest$statistic,3))
     tab<-rbind(table(x),
-            table(data$subscribe,x),
-            paste("**",round(unlist(lapply(split(data$subscribe01,f=x),mean)),4),"**",sep=""),c(" "," "),
+            table(wrkdat$subscribe,x),
+            paste("**",round(unlist(lapply(split(wrkdat$subscribe01,f=x),mean)),4),"**",sep=""),c(" "," "),
             c("*Statistic*","*p-value*"),
             c(diff,pval),
             c( mhtest.stat,mhtest.pval))
     rownames(tab)<-c("**Sample**","Subscribed","Not Subscribed","Proportion Subscribing","___","**Test**","Difference in Proportions"," CMH $\\chi^2$ Test")
     colnames(tab)<-paste("**",colnames(tab),"**",sep="")
     return(tab)
-    
-    
+
+
 }
 ```
 
@@ -264,9 +302,9 @@ Ovearll rates of subscription are higher:
 ```{r tabbdf, results="asis"}
 # A,C,E versus B,D,F (a test of opt-in versus enhanced active).
 
-data$treat_bdf_01<-as.numeric(grepl("B|D|F",data$treatment))
-data$treat_bdf<-ifelse(grepl("B|D|F",data$treatment),"Enhanced Active","Opt-In")
-tab_bdf<-table.maker(data$treat_bdf)
+wrkdat$treat_bdf_01<-as.numeric(grepl("B|D|F",wrkdat$treatment))
+wrkdat$treat_bdf<-ifelse(grepl("B|D|F",wrkdat$treatment),"Enhanced Active","Opt-In")
+tab_bdf<-table.maker(wrkdat$treat_bdf)
 kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
 
 ```
@@ -276,10 +314,10 @@ kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
 ```{r tababcd,results="asis"}
 # A,B,C,D versus E,F (a test of Block of 10 present versus active)
 
-data$treat_abcd_01<-as.numeric(grepl("A|B|C|D",data$treatment))
-data$treat_abcd<-ifelse(grepl("A|B|C|D",data$treatment),"Present","Absent")
-data$treat_abcd<-factor(data$treat_abcd,levels=c("Present","Absent"))
-tab_abcd<-table.maker(data$treat_abcd)
+wrkdat$treat_abcd_01<-as.numeric(grepl("A|B|C|D",wrkdat$treatment))
+wrkdat$treat_abcd<-ifelse(grepl("A|B|C|D",wrkdat$treatment),"Present","Absent")
+wrkdat$treat_abcd<-factor(wrkdat$treat_abcd,levels=c("Present","Absent"))
+tab_abcd<-table.maker(wrkdat$treat_abcd)
 kable(tab_abcd,caption="Block of 10 Present or Absent")
 
 
@@ -290,11 +328,11 @@ kable(tab_abcd,caption="Block of 10 Present or Absent")
 ```{r tabab,results="asis"}
 # A,B versus C,D (a test of list versus quiz format)
 
-data$treat_ab_01<-as.numeric(grepl("A|B",data$treatment))
-data$treat_ab_01[!grepl("A|B|C|D",data$treatment)]<-NA
-data$treat_ab<-ifelse(data$treat_ab_01==1,"List","Quiz")
+wrkdat$treat_ab_01<-as.numeric(grepl("A|B",wrkdat$treatment))
+wrkdat$treat_ab_01[!grepl("A|B|C|D",wrkdat$treatment)]<-NA
+wrkdat$treat_ab<-ifelse(wrkdat$treat_ab_01==1,"List","Quiz")
 
-tab_ab<-table.maker(data$treat_ab)
+tab_ab<-table.maker(wrkdat$treat_ab)
 kable(tab_ab)
 
 ```
