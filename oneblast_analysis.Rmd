@@ -120,38 +120,42 @@ stopifnot(all(!is.na(subscribers$Subscribe.Date)))
 sort(unique(subscribers$Subscribe.Date))[1:10]
 rev(sort(unique(subscribers$Subscribe.Date)))[1:10]
 
-### First match on email addresses
+## First match on email addresses
 bigdat<-wrkdat
 matchedemails<-intersect(row.names(bigdat),row.names(subscribers))
 bigdat[matchedemails,"sdate"]<-subscribers[matchedemails,"Subscribe.Date"]
 stopifnot(sum(!is.na(bigdat$sdat))==5563)
 
-## The subscribers unmatched by email address
-tmp<-subscribers[setdiff(row.names(subscribers),matchedemails),]
-stopifnot(nrow(subscribers)==( sum(!is.na(bigdat$sdat))+nrow(tmp) ))
-## How many unique names are left after the email based matching?
-tmp$dups <- tmp$name1hash %in% names(table(tmp$name1hash)[table(tmp$name1hash)>1])
-subdat<-tmp[!tmp$dups,]
+subscribers$noemailmatch<- !(row.names(subscribers) %in% matchedemails)
+stopifnot(sum(!subscribers$noemailmatch)==5563)
 
-# Verify no overlap between email addresses
-stopifnot( sum(subdat$emailhash %in% bigdat$emailhash) == 0)
+subdat<-subscribers[subscribers$noemailmatch,]
+## Next, among those unmatched, try to match on name
+### First, only match unique names (i.e. unique names on the design data).
+####  There are 881 unique names in bigdat that have matches among subscribers without matching email addresses.
+#### Among those names, 880 are unique in the subscribers database.
 
-## Merge based on name1 for the rows in bigdat without email based matches
+## Here we see that, among subjects with no email matches, we have some very common names, for example 1 name is repeated 53 times.
+table( table(bigdat$name1hash[is.na(bigdat$sdate) & (bigdat$name1hash %in% subdat$name1hash)]) )
+tmptabD<-table(bigdat$name1hash[is.na(bigdat$sdate) & (bigdat$name1hash %in% subdat$name1hash)])
+tmptabS<-table(subdat$name1hash[subdat$name1hash %in% names(tmptabD[tmptabD==1])])
 
-### One issue is that we duplicates: There are 881 unique names in this group, but there are 232 cases with two names in bigdat that match at least one name in tmp. So, here, continue to work with unique names.
-table(table(bigdat$name1hash[is.na(bigdat$sdat) & (bigdat$name1hash %in% tmp$name1hash)]))
-tmptab<-table(bigdat$name1hash[is.na(bigdat$sdat) & (bigdat$name1hash %in% tmp$name1hash)])
+### Problem here is that we don't really know if a "Jake Bowers" in both datasets is the same person. We only know that "Jake Bowers" only appeared once in each dataset and that the email addresses of Jake Bowers do not match between the two. So we are hoping the bias is not large here.
 
-## Take people in bigdat with unique names that exist in subscribers.
-### Problem here is that we don't really know if a "Jake Bowers" in both datasets is the same person. We only know that "Jake Bowers" only appeared once in each dataset and that the email addresses of Jake Bowers do not match between the two.
+bigdat2<-merge(bigdat,
+	       subdat[subdat$name1hash %in% names(tmptabS[tmptabS==1]),]
+	       ,by="name1hash",all.x=TRUE,sort=FALSE,suffixes=c(".big",".sub"))
 
-bigdat$uniqueoverlapname1 <- bigdat$name1hash %in% names(tmptab[tmptab==1])
-
-bigdat2<-merge(bigdat,subdat[subdat$name1hash %in% names(tmptab[tmptab==1]),],by="name1hash",all.x=TRUE,sort=FALSE)
-stopifnot(nrow(bigdat2)==nrow(wrkdat))
+with(bigdat2,table(is.na(sdate),is.na(Subscribe.Date)))
 bigdat2$sdate2 <- ifelse(is.na(bigdat2$sdate),bigdat2$Subscribe.Date,bigdat2$sdate)
 
+## Now, we have more than one possible name for each person in the design data. How 
 
+```
+
+Older code below
+
+```{r}
 
 wrkdat$sub01_emailname<-ifelse(wrkdat$emailhash%in%subscribers$emailhash|
                                  wrkdat$name1hash%in%subscribers$name1hash[subscribers$multi_name01==0],1,0)
