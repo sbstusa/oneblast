@@ -83,7 +83,7 @@ tab_names_sub<-cbind(c(no_of_multi_sub,"No Name"),
 colnames(tab_names_sub)<-c("Times Name Appears","Frequency","Observations")
 ```
 
-First, we match those sent email treatments to subscribers by email address.
+First, we match those sent email treatments to subscribers by email address. 
 
 ```{r}
 # Matches by email
@@ -123,11 +123,38 @@ stopifnot(sum(!subscribers$noemailmatch)==5563)
 
 subdat<-subscribers[subscribers$noemailmatch,]
 
+stopifnot(nrow(subdat)==2196)
 ```
 
 
-Next, among those unmatched, try to match on name. This is tricky but we start
-simple.  First, only match unique names (i.e. unique names on the design data).
+Next, among those 2169 unmatched subscribers, try to match on name within
+batch. This is tricky but we start simple.  Add batch information to the
+subscription file to add in merging otherwise we will have *at least* 900
+subscriptions with no match to the experimental treatments.
+
+We assume that if you have subscribed after the mailing of batch A but before
+batch B, then you were randomized to batch A.
+
+```{r}
+table(designdata$Batch)
+table(as.Date(subscriptiondata$Subscribe.Date,format="%m/%d/%y"),exclude=c())
+``
+
+Add start date of batch using information provided by the agency.^[After cleaning the file in a spreadsheet to remove extraneous information.]
+
+```{r}
+batchdates<-read.csv("batchdates.csv",as.is=TRUE,header=TRUE,strip.white=TRUE)
+## Remove empty rows
+batchdates[batchdates==""]<-NA ## replace empty strings with NA
+emptyrow<-apply(batchdates,1,function(x){ all(is.na(x))})
+badrows<-apply(batchdates,1,function(x){ tmp<-grep("TAR",x); if(length(tmp)==0){ return(FALSE) } else { TRUE } })
+batchdates<-batchdates[!emptyrow & !badrows,]
+batchdates$Batch<-rep(1:82,each=2)
+```
+
+
+
+First, only match unique names (i.e. unique names on the design data).
 There are 881 unique names in the design data that have matches among subscribers
 without matching email addresses.  Among those names, 880 are unique in the
 subscribers database.
