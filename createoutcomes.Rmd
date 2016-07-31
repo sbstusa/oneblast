@@ -150,6 +150,107 @@ emptyrow<-apply(batchdates,1,function(x){ all(is.na(x))})
 badrows<-apply(batchdates,1,function(x){ tmp<-grep("TAR",x); if(length(tmp)==0){ return(FALSE) } else { TRUE } })
 batchdates<-batchdates[!emptyrow & !badrows,]
 batchdates$Batch<-rep(1:82,each=2)
+stopifnot(all(na.omit(batchdates$Batch.Number-batchdates$Batch)==0))
+
+## Fill in treatment information
+batchdates$eMail.to.send[seq(2,164,by=2)]<-batchdates$eMail.to.send[seq(1,163,by=2)]
+batchdates$eMail.to.send.1[seq(2,164,by=2)]<-batchdates$eMail.to.send.1[seq(1,163,by=2)]
+batchdates$eMail.to.send.2[seq(2,164,by=2)]<-batchdates$eMail.to.send.2[seq(1,163,by=2)]
+batchdates$eMail.to.send.3[seq(2,164,by=2)]<-batchdates$eMail.to.send.3[seq(1,163,by=2)]
+batchdates$eMail.to.send.4[seq(2,164,by=2)]<-batchdates$eMail.to.send.4[seq(1,163,by=2)]
+batchdates$eMail.to.send.5[seq(2,164,by=2)]<-batchdates$eMail.to.send.5[seq(1,163,by=2)]
+
+## Pull off the actual send times
+
+bdlong<-reshape(batchdates,direction="long",v.names=c("eMail.to.send","Details"),
+		varying=list(eMail.to.send=grep("eMail.to.send",names(batchdates),value=TRUE),
+			     Details=grep("Details",names(batchdates),value=TRUE)))
+
+
+bdlongActual <- bdlong[grep("Actual",bdlong$Details),]
+
+## Three actual send times were not recorded (we assume they were actually sent). So use the set time.
+##bdlongActual[bdlongActual$Batch==16&bdlongActual$eMail.to.send=="A",] <- bdlong[bdlong$Batch==16&bdlong$eMail.to.send=="A"&bdlong$Batch.Number==16,"Details"]
+## Strip off "PM"
+bdlongActual[bdlongActual$Batch==16&bdlongActual$eMail.to.send=="A","Details"] <- bdlong["31.4","Details"]
+bdlongActual[bdlongActual$Batch==36&bdlongActual$eMail.to.send=="E","Details"] <- bdlong["71.5","Details"]
+bdlongActual[bdlongActual$Batch==80&bdlongActual$eMail.to.send=="F","Details"] <- bdlong["159.6","Details"]
+
+## Make sure that each treatment is associated with one and only one batch
+stopifnot(all(with(bdlongActual,table(Batch,eMail.to.send))==1))
+
+## Convert Details into dates
+bdlongActual$dateString<-sapply(strsplit(bdlongActual$Details,":\ "),function(x){ x[2] })
+bdlongActual$date <- as.Date(bdlongActual$dateString,format="%d-%b-%Y %H:%M:%S")
+bdlongActual[grep("PM",bdlongActual$dateString),"date"]<-as.Date(bdlongActual$dateString[grep("PM",bdlongActual$dateString)],
+								 ,format="%m/%d/%Y %H:%M:%S %p")
+stopifnot(sum(is.na(bdlongActual$date))==0)
+table(bdlongActual$date)
+```
+
+Now, the subscription data only has day of subscription, no time. So, in order
+to map date of subscription onto batch among those not matched by email, we
+have to collapse batches into a day (often there were two batches per day). We
+hope that we can still back out original batch after doing the matching by name
+and collapsed-batch.
+
+```{r}
+subdat$dateDay<-as.Date(subdat$Subscribe.Date,format="%m/%d/%y")
+
+## Batch Day/Collapsed Batch to Date mapping
+bdlongActual$dateDay <- round(bdlongActual$date)
+stopifnot(length(unique(bdlongActual$dateDay))==41)
+
+batchdaydat<-data.frame(dateDay=unique(bdlongActual$dateDay),
+			batchday=rank(unique(bdlongActual$dateDay)))
+row.names(batchdaydat)<-batchdaydat$dateDay
+
+subdat2<-merge(subdat,batchdaydat,all.x=TRUE,sort=FALSE)
+## Now we have some subscription dates that are not on a mailing day
+sum(is.na(subdat2$batchday))
+
+intermaildates<-unique(subdat2$dateDay[is.na(subdat2$batchday)])
+## Choose the mailing date that is closest to the subscription day, yet before the subscription day
+
+getcloseday<-function(x){
+	# x is date subscribed, a scalar
+	y <- batchdaydat$dateDay
+	thediff<-x - y
+	return( as.Date(max(y[thediff>=0])) )
+}
+
+getcloseday(subdat2$dateDay[1])
+
+## This is a very weird hack to ensure that the newdate column stayed a Date
+newdate <- vector(length=nrow(subdat2))
+class(newdate)<-"Date"
+for(i in 1:length(subdat2$dateDay)){
+	newdate[i]<-getcloseday(subdat2$dateDay[i])
+}
+subdat2$newdate<-newdate
+
+stopifnot(all(with(subdat2[!is.na(subdat2$batchday),],dateDay-newdate)==0))
+
+subdat2$batchday2<-NA
+subdat2$batchday2 <- batchdaydat[as.character(subdat2$newdate),"batchday"]
+
+## Check that each newdate is associated with one batch
+thetab<-with(subdat2,table(newdate,batchday2))
+stopifnot(all(c(unique(thetab[upper.tri(thetab)]), unique(thetab[lower.tri(thetab)]))==0))
+
+```
+
+Now, make a collapsed batchday variable on the design data:
+
+```{r}
+wrkdat$batchday<-as.numeric(cut(wrkdat$Batch,seq(0,82,by=2)))
+
+tmptab<-with(wrkdat,table(batchday,Batch))
+stopifnot(all(apply(tmptab,1,function(x){ sum(x!=0) }) == 2 ))
+stopifnot(all(apply(tmptab,2,function(x){ sum(x!=0) }) == 1 ))
+
+stop
+break
 ```
 
 
