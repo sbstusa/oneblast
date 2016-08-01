@@ -24,7 +24,6 @@ opts_chunk$set(eval=T,echo=F,results="hide",message=F,warning=F,cache=T)
 ```{r setup}
 wrkdat<-read.csv("data/designdata.csv",as.is=TRUE)
 subscribers<-read.csv("data/subscriptiondata.csv",as.is=TRUE)
-
 ```
 
 
@@ -46,44 +45,31 @@ stopifnot(sum(wrkdat$emailhash%in%subscribers$emailhash)==5563) # 5563 subscribe
 names(wrkdat)[3]<-"treatment"
 ```
 
-Some people share names. And this will come to be a problem for the analysis of
-this data. We engage with it below. In this section, we mostly explore the
-extent to which people share names.
+# Mark unmatchable subscribers
+
+If a subscriber has no match on email or full name or last name to any email or name in the experimental pool, note this. These people are unmatchable. They may be people who subscribed but were outside the study. Or they may be people in the study who subscribed changing their names and email addresses. For now, we exclude these people from matching. We'll return to them later.
 
 ```{r}
-# Create indicator for multiple names
-# Data
-multi_names<-names(which(table(wrkdat$name1hash)>1))
-wrkdat$multi_name01<-ifelse(wrkdat$name1hash%in%multi_names,1,0)
-table(wrkdat$multi_name01) # 152828 rows share names with at least one other person
-
-# Subscribers
-multi_names_sub<-names(which(table(subscribers$name1hash)>1))
-subscribers$multi_name01<-ifelse(subscribers$name1hash%in%multi_names_sub,1,0)
-stopifnot(table(subscribers$multi_name01)[2]==142) # 142 rows share names with at least one other person
-table(table(subscribers$name1hash))
-
-# Distribution of multiple names: Data
-no_of_multi<-sort(unique(table(wrkdat$name1hash)))
-counts<-hist(table(wrkdat$name1hash),plot=F,breaks=0:93)$count
-counts<-counts[counts!=0]
-tab_names_data<-cbind(c(no_of_multi,"No Name"),
-                          c(counts,sum(is.na(wrkdat$name1hash))),
-                          c(counts,sum(is.na(wrkdat$name1hash)))*c(no_of_multi,1)
-                          )
-colnames(tab_names_data)<-c("Times Name Appears","Frequency","Observations")
-# Distribution of multiple names: Subscribers
-no_of_multi_sub<-sort(unique(table(subscribers$name1hash)))
-counts_sub<-hist(table(subscribers$name1hash),breaks=0:4,plot=F)$count
-counts_sub<-counts_sub[counts_sub!=0]
-tab_names_sub<-cbind(c(no_of_multi_sub,"No Name"),
-                          c(counts_sub,sum(is.na(subscribers$name1hash))),
-                          c(counts_sub,sum(is.na(subscribers$emailhash)))*c(no_of_multi_sub,1)
-                          )
-colnames(tab_names_sub)<-c("Times Name Appears","Frequency","Observations")
+subscribers$noemail2match <- !(subscribers$emailhash %in% wrkdat$emailhash)
+subscribers$noname2match <-  !(subscribers$name1hash %in% na.omit(unlist(wrkdat[,grep("name[0-9].?hash",names(wrkdat),value=TRUE)])))
+subscribers$nolastname2match <-  !(subscribers$Last.Name1hash %in% na.omit(unlist(wrkdat[,grep("Last.Name[0-9].?hash",names(wrkdat),value=TRUE)])))
+subscribers$noway2match <- subscribers$noemail2match & subscribers$noname2match & subscribers$nolastname2match
+stopifnot(sum(subscribers$noway2match)==177)
 ```
 
-First, we match those sent email treatments to subscribers by email address. 
+There are `r sum(subscribers$noway2match)` people who have no email, no name,
+and no last name that overlap with anyone in the original experimental pool
+(this includes looking accross up to 24 different names and up to 24 different
+last names). If these people subscribed but were not part of the experiment, we
+can just exclude them. If these people were part of the experiment, then we
+have 744 positive outcomes with unknown relationship with treatment assignment.
+The question we will ask is whether our main results will change (and how much)
+given a few ways to distribute these responses across treatments and
+batches.
+
+## Match on email
+
+Then,  match those sent email treatments to subscribers by email address.
 
 ```{r}
 # Matches by email
@@ -93,7 +79,7 @@ stopifnot(sum(wrkdat$emailhash%in%subscribers$emailhash)==5563) # 5563
 stopifnot(sum(wrkdat$name1hash%in%subscribers$name1hash)==7951) # 7951 subscribers in
 
 # Additional variables
-summary(wrkdat$Order.Within.Condition)
+## table(wrkdat$Order.Within.Condition)
 table(wrkdat$Condition.Order.Within.Batch)
 
 ### Make sure that each row is a unique email address
@@ -108,24 +94,25 @@ sort(unique(subscribers$Subscribe.Date))[1:10]
 rev(sort(unique(subscribers$Subscribe.Date)))[1:10]
 ```
 
-
 First match on email addresses. If an email address in the design data ends up
 in the subscriber file, then we know that person subscribed to the newsletter.
 
 ```{r}
-bigdat<-wrkdat
-matchedemails<-intersect(row.names(bigdat),row.names(subscribers))
-bigdat[matchedemails,"sdate"]<-subscribers[matchedemails,"Subscribe.Date"]
-stopifnot(sum(!is.na(bigdat$sdat))==5563)
+matchedemails<-intersect(row.names(wrkdat),row.names(subscribers))
+wrkdat[matchedemails,"sdate"]<-subscribers[matchedemails,"Subscribe.Date"]
+stopifnot(sum(!is.na(wrkdat$sdat))==5563)
 
 subscribers$noemailmatch<- !(row.names(subscribers) %in% matchedemails)
 stopifnot(sum(!subscribers$noemailmatch)==5563)
 
-subdat<-subscribers[subscribers$noemailmatch,]
+## Excluding the people for whom there is no point in matching for now
+subdat<-subscribers[subscribers$noemailmatch & !subscribers$noway2match,]
 
-stopifnot(nrow(subdat)==2196)
 ```
 
+So, we have 2019 subscribers who were not matched on email address.
+
+## Match on full name within batch
 
 Next, among those 2169 unmatched subscribers, try to match on name within
 batch. This is tricky but we start simple.  Add batch information to the
@@ -136,9 +123,9 @@ We assume that if you have subscribed after the mailing of batch A but before
 batch B, then you were randomized to batch A.
 
 ```{r}
-table(designdata$Batch)
-table(as.Date(subscriptiondata$Subscribe.Date,format="%m/%d/%y"),exclude=c())
-``
+table(wrkdat$Batch)
+table(as.Date(subscribers$Subscribe.Date,format="%m/%d/%y"),exclude=c())
+```
 
 Add start date of batch using information provided by the agency.^[After cleaning the file in a spreadsheet to remove extraneous information.]
 
@@ -160,12 +147,10 @@ batchdates$eMail.to.send.3[seq(2,164,by=2)]<-batchdates$eMail.to.send.3[seq(1,16
 batchdates$eMail.to.send.4[seq(2,164,by=2)]<-batchdates$eMail.to.send.4[seq(1,163,by=2)]
 batchdates$eMail.to.send.5[seq(2,164,by=2)]<-batchdates$eMail.to.send.5[seq(1,163,by=2)]
 
-## Pull off the actual send times
-
+## Pull off the actual send times and change the data to have multiple rows for batches rather than columns
 bdlong<-reshape(batchdates,direction="long",v.names=c("eMail.to.send","Details"),
 		varying=list(eMail.to.send=grep("eMail.to.send",names(batchdates),value=TRUE),
 			     Details=grep("Details",names(batchdates),value=TRUE)))
-
 
 bdlongActual <- bdlong[grep("Actual",bdlong$Details),]
 
@@ -192,7 +177,11 @@ Now, the subscription data only has day of subscription, no time. So, in order
 to map date of subscription onto batch among those not matched by email, we
 have to collapse batches into a day (often there were two batches per day). We
 hope that we can still back out original batch after doing the matching by name
-and collapsed-batch.
+and collapsed-batch. If not, we will lose some statistical power because our
+blocking variable (batch) will be less fine grained, but we will probably gain
+more because we can increase the sample size and also will reduce our problems
+with unmatchable subscribers (unknown relationships between treatement
+assignment and outcome).
 
 ```{r}
 subdat$dateDay<-as.Date(subdat$Subscribe.Date,format="%m/%d/%y")
@@ -205,11 +194,14 @@ batchdaydat<-data.frame(dateDay=unique(bdlongActual$dateDay),
 			batchday=rank(unique(bdlongActual$dateDay)))
 row.names(batchdaydat)<-batchdaydat$dateDay
 
-subdat2<-merge(subdat,batchdaydat,all.x=TRUE,sort=FALSE)
+## Just add appropriate batchday info to the subdat data
+subdat<-merge(subdat,batchdaydat,all.x=TRUE,sort=FALSE)
 ## Now we have some subscription dates that are not on a mailing day
-sum(is.na(subdat2$batchday))
+sum(is.na(subdat$batchday))
+stopifnot(length(unique(subdat$emailhash))==nrow(subdat))
+row.names(subdat)<-subdat$emailhash
 
-intermaildates<-unique(subdat2$dateDay[is.na(subdat2$batchday)])
+intermaildates<-unique(subdat$dateDay[is.na(subdat$batchday)])
 ## Choose the mailing date that is closest to the subscription day, yet before the subscription day
 
 getcloseday<-function(x){
@@ -219,127 +211,157 @@ getcloseday<-function(x){
 	return( as.Date(max(y[thediff>=0])) )
 }
 
-getcloseday(subdat2$dateDay[1])
+getcloseday(subdat$dateDay[1])
 
 ## This is a very weird hack to ensure that the newdate column stayed a Date
-newdate <- vector(length=nrow(subdat2))
+newdate <- vector(length=nrow(subdat))
 class(newdate)<-"Date"
-for(i in 1:length(subdat2$dateDay)){
-	newdate[i]<-getcloseday(subdat2$dateDay[i])
+for(i in 1:length(subdat$dateDay)){
+	newdate[i]<-getcloseday(subdat$dateDay[i])
 }
-subdat2$newdate<-newdate
+subdat$newdate<-newdate
 
-stopifnot(all(with(subdat2[!is.na(subdat2$batchday),],dateDay-newdate)==0))
+stopifnot(all(with(subdat[!is.na(subdat$batchday),],dateDay-newdate)==0))
 
-subdat2$batchday2<-NA
-subdat2$batchday2 <- batchdaydat[as.character(subdat2$newdate),"batchday"]
+subdat$batchday2<-NA
+subdat$batchday2 <- batchdaydat[as.character(subdat$newdate),"batchday"]
 
-## Check that each newdate is associated with one batch
-thetab<-with(subdat2,table(newdate,batchday2))
+## Check that each newdate is associated with one batch and only one batch
+thetab<-with(subdat,table(newdate,batchday2))
 stopifnot(all(c(unique(thetab[upper.tri(thetab)]), unique(thetab[lower.tri(thetab)]))==0))
-
+stopifnot(nrow(subdat)==2019)
 ```
 
 Now, make a collapsed batchday variable on the design data:
 
 ```{r}
-wrkdat$batchday<-as.numeric(cut(wrkdat$Batch,seq(0,82,by=2)))
-
-tmptab<-with(wrkdat,table(batchday,Batch))
+wrkdat$batchday2<-as.numeric(cut(wrkdat$Batch,seq(0,82,by=2)))
+## Make sure that the new batch collects exactly two of the original batches
+tmptab<-with(wrkdat,table(batchday2,Batch))
 stopifnot(all(apply(tmptab,1,function(x){ sum(x!=0) }) == 2 ))
 stopifnot(all(apply(tmptab,2,function(x){ sum(x!=0) }) == 1 ))
-
-stop
-break
 ```
 
-
-
-First, only match unique names (i.e. unique names on the design data).
-There are 881 unique names in the design data that have matches among subscribers
-without matching email addresses.  Among those names, 880 are unique in the
-subscribers database.
-
-Here we see that, among subjects with no email matches, we have some very common names, for example 1 name is repeated 53 times.
-```{r}
-## Here we see that, among subjects with no email matches, we have some very common names, for example 1 name is repeated 53 times.
-table( table(bigdat$name1hash[is.na(bigdat$sdate) & (bigdat$name1hash %in% subdat$name1hash)]) )
-tmptabD<-table(bigdat$name1hash[is.na(bigdat$sdate) & (bigdat$name1hash %in% subdat$name1hash)])
-tmptabS<-table(subdat$name1hash[subdat$name1hash %in% names(tmptabD[tmptabD==1])])
-```
-
-Now, this second round of matching is difficult to validate: we don't really
-know if a "Jake Bowers" in both datasets is the same person. We only know that
-"Jake Bowers" only appeared once in each dataset and that the email addresses
-of Jake Bowers do not match between the two. For this next step, we are willing
-to risk a bit of bias here: we imagine that names that only occur once in each
-file are very likely to be the same person.
+Now match subscribers who have the same name *and* batch number as experimental pool subjects.
 
 ```{r}
-bigdat2<-merge(bigdat,
-	       subdat[subdat$name1hash %in% names(tmptabS[tmptabS==1]),]
-	       ,by="name1hash",all.x=TRUE,sort=FALSE,suffixes=c(".big",".sub"))
+## Make a dataset called expool for those people in the experimental pool not matched on email
+expool<-wrkdat[is.na(wrkdat$sdate),]
+stopifnot(nrow(expool)==486316)
 
-with(bigdat2,table(is.na(sdate),is.na(Subscribe.Date)))
-bigdat2$sdate2 <- ifelse(is.na(bigdat2$sdate),bigdat2$Subscribe.Date,bigdat2$sdate)
+## Go batch by batch just for clarity. There are probably faster vectorized ways.
+lastnms<-grep("Last.Name[0-9].?hash$",names(wrkdat),value=TRUE)
+expbatches <- split(expool[,c("emailhash","name1hash","sdate","batchday2",lastnms)],expool$batchday2)
+subbatches <- split(subdat,subdat$batchday2)
+stopifnot(length(expbatches)==length(subbatches))
+
+## Remove subscriber names that are duplicated within batch
+uniqsubs<-lapply(subbatches,function(dat){
+			 thetab <- table(dat$name1hash)
+			 dups <- names(thetab[thetab>1])
+			 if(length(dups)==0){
+				 message("ok")
+				 return(dat)
+			 } else {
+				 message(length(dups))
+				 return(dat[!(dat$name1hash %in% dups),])
+			 }
+			})
+## How many names do we remove? About 4*2=8.
+table(sapply(subbatches,nrow)-sapply(uniqsubs,nrow))
+
+## Now merge from the subscribers onto the experimental pool batch by batch
+merge2list<-list()
+for(i in 1:length(expbatches)){
+	message(i)
+	merge2list[[i]]<- merge(expbatches[[i]],uniqsubs[[i]],by="name1hash",all.x=TRUE,sort=FALSE)
+	stopifnot(nrow(merge2list[[i]])==nrow(expbatches[[i]]))
+	uniqsubs[[i]]$matched <- uniqsubs[[i]]$name1hash %in% expbatches[[i]]$name1hash
+}
+sum(sapply(merge2list,nrow))
+mergeexpool<-do.call("rbind",merge2list)
+mergeexpool$sdate<-mergeexpool$Subscribe.Date
+subdat2<-do.call("rbind",uniqsubs)
+subdat2<-subdat2[!subdat2$matched,]
+stopifnot(nrow(subdat2)==1206)
+rm(expbatches,uniqsubs,merge2list,i,subbatches)
+```
+
+So we have 1206 subscribers who are not matched after matching on full name and email address.
+
+## Match on last name within batch
+
+Now, do one last matching on unique last names within batch. Some inspection of
+the data suggested that people called "Jake Bowers" might sometimes use "J
+Bowers" or "Jacob Bowers". So, among those not already matched, and among those
+last names that are unique within batch, do one last merge.
+
+```{r}
+## First remove last names that are duplicated within batch among subscribers (about 39)
+subdat2$duplastname<-unsplit(lapply(split(subdat2,subdat2$batchday2),function(dat){
+				    thetab <- table(dat$Last.Name1hash)
+				    dups <- names(thetab[thetab>1])
+				    dat$Last.Name1hash %in% dups
+			     }),subdat2$batchday2)
+sub2batches<-split(subdat2[!subdat2$duplastname,],subdat2[!subdat2$duplastname,"batchday2"])
+
+mergeexpool$Last.Name1hash<-mergeexpool$Last.Name1hash.x
+mergeexpool$emailhash<-mergeexpool$emailhash.x
+mergeexpool$batchday2<-mergeexpool$batchday2.x
+expool2batches<-split(mergeexpool[,c("emailhash",lastnms,"batchday2","sdate")],mergeexpool$batchday2)
+
+## Find the subscriber last names which uniquely match *any* of the experimental pool last names within batchday
+whichsub2list<-list()
+for(i in 1:length(expool2batches)){
+	message(i)
+	whichsub2list[[i]]<-apply(expool2batches[[i]][,lastnms],1,function(x){
+					  ##res<-sub2batches[[i]]$Subscribe.Date[sub2batches[[i]]$Last.Name1hash %in% x]
+					  res<- which(sub2batches[[i]]$Last.Name1hash %in% x)
+					  if(length(res)==0 | length(res)>1){
+						  ## Not a match if no match or if more than one unique match
+						  return(NA)
+					  } else {
+						  return(res)
+					  }
+			})
+        thetab <- table(whichsub2list[[i]])
+	uniqnms <- as.numeric(names(thetab[thetab==1]))
+	poolrows <- names(whichsub2list[[i]][whichsub2list[[i]] %in% uniqnms])
+	expool2batches[[i]]$sdate3<-NA
+	expool2batches[[i]][poolrows,"sdate3"]<- sub2batches[[i]][uniqnms,"Subscribe.Date"]
+	sub2batches[[i]]$nolastnmmatch<-TRUE
+	sub2batches[[i]][uniqnms,"nolastnmmatch"]<-FALSE
+}
+
+subdat3<-do.call("rbind",sub2batches)
+stopifnot(nrow(subdat2[!subdat2$duplastname,])==nrow(subdat3))
+
+mergeexpool2 <- do.call("rbind",expool2batches)
+stopifnot(nrow(mergeexpool2)==nrow(mergeexpool))
+
+rm(expool2batches,sub2batches)
+mergeexpool2$finalsdate<-with(mergeexpool2,ifelse(is.na(sdate3),sdate,sdate3))
+table(is.na(mergeexpool2$finalsdate))
+table(is.na(mergeexpool2$sdate))
+table(is.na(mergeexpool2$sdate3))
+
+stopifnot(length(unique(mergeexpool2$emailhash))==nrow(mergeexpool2))
+row.names(mergeexpool2)<-mergeexpool2$emailhash.x
 
 ```
 
-Now, we have about 1316 people in the subscribers file who did not match on
-email and who could, in theory, be matched with more than one design data row.
-
-On one hand, we have about 20 people with the same names in the unmatched part
-of the subscribers file.
+Which subscribers are still not matched? What (pseudo)batches were they in?
 
 ```{r}
 
-subdat2 <- subdat[!(subdat$name1hash %in% names(tmptabS[tmptabS==1])),]
-table(table(subdat2$name1hash))
-sum(table(subdat2$name1hash)[table(subdat2$name1hash)>1])
 
 ```
 
-On the design data, we have up to 9 names remaining to match. And many of these
-are not unique (for example, see the following table for the first name listed
-in this group).
+## Put it all back together
 
-```{r}
-designnames2<-bigdat2[is.na(bigdat2$sdate2),grep("^name",names(bigdat2))]
-apply(designnames2,2,function(x){ sum(!is.na(x)) })
-table(table(designnames2$name1hash))
-numnames<-rowSums(!is.na(designnames2))
-table(numnames)
-```
-
-First, we exclude subscribers for which we have no match on name at all. This
-leaves us with 451 unique names out of the remaining `r nrow(subdat2)` names.
-
-```{r}
-alldesignnames2<-unlist(designnames2)
-possmatchnames<- intersect(subdat2$name1hash,alldesignnames2)
-length(possmatchnames)
-table(table(subdat2$name1hash[subdat2$name1hash %in% possmatchnames]))
-```
-
-There are 8 unique matches in the long list of designnames.
+Put the experimental pool back together.
 
 ```{r}
 
-tmptabS2<-table(alldesignnames2[alldesignnames2 %in% possmatchnames])
-
-tmptabS3<-table(subdat2$name1hash[subdat2$name1hash %in% names(tmptabS2[tmptabS2==1])])
-
-uniqueothermatches<-names(tmptabS3[tmptabS3==1])
-length(uniqueothermatches)
+## Make sure same number of rows.
 ```
-
-So, we can add those to the design file.
-
-The rest of the subscribers data is either (1) unmatchable (i.e. no matching
-email address, no matching names) or (2) does not have unique name matches such
-that we could not, with confidence, attribute a subscription to a given
-treatment.
-
-
-
-
