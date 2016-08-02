@@ -4,8 +4,7 @@ author: "Paul Testa and Jake Bowers"
 date: '`r format(Sys.Date(), "%B %d, %Y")`'
 output:
     html_document:
-        toc: TRUE
-	template: cosmo
+      toc: TRUE
 ---
 
 ```{r init,echo=F}
@@ -100,7 +99,7 @@ in the subscriber file, then we know that person subscribed to the newsletter.
 ```{r}
 matchedemails<-intersect(row.names(wrkdat),row.names(subscribers))
 wrkdat[matchedemails,"sdate"]<-subscribers[matchedemails,"Subscribe.Date"]
-stopifnot(sum(!is.na(wrkdat$sdat))==5563)
+stopifnot(sum(!is.na(wrkdat$sdate))==5563)
 
 subscribers$noemailmatch<- !(row.names(subscribers) %in% matchedemails)
 stopifnot(sum(!subscribers$noemailmatch)==5563)
@@ -185,6 +184,7 @@ assignment and outcome).
 
 ```{r}
 subdat$dateDay<-as.Date(subdat$Subscribe.Date,format="%m/%d/%y")
+subscribers$dateDay<-as.Date(subscribers$Subscribe.Date,format="%m/%d/%y")
 
 ## Batch Day/Collapsed Batch to Date mapping
 bdlongActual$dateDay <- round(bdlongActual$date)
@@ -214,12 +214,11 @@ getcloseday<-function(x){
 getcloseday(subdat$dateDay[1])
 
 ## This is a very weird hack to ensure that the newdate column stayed a Date
-newdate <- vector(length=nrow(subdat))
-class(newdate)<-"Date"
+subdat$newdate<-NA
+class(subdat$newdate)<-"Date"
 for(i in 1:length(subdat$dateDay)){
-	newdate[i]<-getcloseday(subdat$dateDay[i])
+	subdat$newdate[i]<-getcloseday(subdat$dateDay[i])
 }
-subdat$newdate<-newdate
 
 stopifnot(all(with(subdat[!is.na(subdat$batchday),],dateDay-newdate)==0))
 
@@ -280,11 +279,14 @@ for(i in 1:length(expbatches)){
 }
 sum(sapply(merge2list,nrow))
 mergeexpool<-do.call("rbind",merge2list)
+stopifnot(nrow(mergeexpool)==486316)
 mergeexpool$sdate<-mergeexpool$Subscribe.Date
+row.names(mergeexpool)<-mergeexpool$emailhash
 subdat2<-do.call("rbind",uniqsubs)
-subdat2<-subdat2[!subdat2$matched,]
-stopifnot(nrow(subdat2)==1206)
-rm(expbatches,uniqsubs,merge2list,i,subbatches)
+row.names(subdat2)<-subdat2$emailhash ## subdat2 take unmatched by email and adds full names
+stopifnot(sum(!subdat2$matched)==1206)
+subdat[row.names(subdat2),"name1matched"]<-subdat2$matched
+rm(expool,expbatches,uniqsubs,merge2list,i,subbatches)
 ```
 
 So we have 1206 subscribers who are not matched after matching on full name and email address.
@@ -297,6 +299,7 @@ Bowers" or "Jacob Bowers". So, among those not already matched, and among those
 last names that are unique within batch, do one last merge.
 
 ```{r}
+subdat2<-subdat2[!subdat2$matched,] ## for next round of matching, exclude people already matched
 ## First remove last names that are duplicated within batch among subscribers (about 39)
 subdat2$duplastname<-unsplit(lapply(split(subdat2,subdat2$batchday2),function(dat){
 				    thetab <- table(dat$Last.Name1hash)
@@ -335,6 +338,7 @@ for(i in 1:length(expool2batches)){
 
 subdat3<-do.call("rbind",sub2batches)
 stopifnot(nrow(subdat2[!subdat2$duplastname,])==nrow(subdat3))
+row.names(subdat3)<-subdat3$emailhash ## subdat3 are those unmatched by email or full name within batch and matches by last names
 
 mergeexpool2 <- do.call("rbind",expool2batches)
 stopifnot(nrow(mergeexpool2)==nrow(mergeexpool))
@@ -346,14 +350,7 @@ table(is.na(mergeexpool2$sdate))
 table(is.na(mergeexpool2$sdate3))
 
 stopifnot(length(unique(mergeexpool2$emailhash))==nrow(mergeexpool2))
-row.names(mergeexpool2)<-mergeexpool2$emailhash.x
-
-```
-
-Which subscribers are still not matched? What (pseudo)batches were they in?
-
-```{r}
-
+row.names(mergeexpool2)<-mergeexpool2$emailhash
 
 ```
 
@@ -362,6 +359,90 @@ Which subscribers are still not matched? What (pseudo)batches were they in?
 Put the experimental pool back together.
 
 ```{r}
+nrow(wrkdat)
+sum(!is.na(wrkdat$sdate))
+nrow(mergeexpool) ## The those in experimental pool with no email match.
+nrow(mergeexpool2) ## Adds  name and last name matches
 
-## Make sure same number of rows.
+setdiff(names(mergeexpool),names(wrkdat))
+wrkdat[row.names(mergeexpool2),"sdateNms"]<-mergeexpool2$finalsdate
+
+table(is.na(wrkdat$sdateNms),is.na(wrkdat$sdate))
+
+wrkdat$finalsdate<-with(wrkdat,ifelse(is.na(sdate),sdateNms,sdate))
+
+wrkdat$subscribed<-as.numeric(!is.na(wrkdat$finalsdate))
+table(wrkdat$subscribed)
+
+nrow(subscribers)-sum(wrkdat$subscribed)
+```
+
+Looks like we will have about 1177 subscribers Which subscribers are still not matched? What (pseudo)batches were they in?
+
+```{r}
+nrow(subscribers) ## 7759 subscribers
+sum(subscribers$noway2match) ## 177 no match possible, maybe not in the experiment at all?
+sum(!subscribers$noemailmatch) ## 5563 email matches: 7759 - 5563 - 177 = 2019 unmatched at this point
+sum(subdat$name1matched,na.rm=TRUE) ## 805 of the no email matches matched on name within batch
+sum(!subdat3$nolastnmmatch) ## 196 of the no name and no email matches matched on at least one last name within batch
+
+## So, 2019-805-196+177 = 1195 unmatched
+
+
+subdat3$lastnmmatch<-!subdat3$nolastnmmatch
+
+## About 2019 people were not matched by email and also had no overlap in name with the experimental pool at all
+setdiff(names(subdat),names(subscribers)) ## subdat are those unmatched by email and unmatchable by name
+subscribers[row.names(subdat),"batchday2"]<-subdat$batchday2
+subscribers[row.names(subdat),"newdate"]<-subdat$newdate
+
+##setdiff(names(subdat2),names(subscribers))
+subscribers[row.names(subdat),"name1matched"]<-subdat$name1matched
+subscribers[is.na(subscribers$name1matched),"name1matched"]<-FALSE
+
+setdiff(names(subdat3),names(subscribers))
+subscribers[row.names(subdat3),"lastnmmatch"]<-subdat3$lastnmmatch
+subscribers[is.na(subscribers$lastnmmatch),"lastnmmatch"]<-FALSE
+nrow(subscribers)
+
+thetab<- with(subscribers,table(possmatch=!noway2match,emailmatch=!noemailmatch,name1matched,lastnmmatch))
+
+## The FALSE, FALSE, FALSE top row shows the unmatched
+ftable(thetab,col.vars="possmatch")
+
+subscribers$matched<-with(subscribers,{ !noemailmatch |  name1matched | lastnmmatch  })
+table(subscribers$matched,exclude=c())
+
+## Total number of subscriptions on the experimental pool file and the total number on our file.
+sum(wrkdat$subscribed) - sum(subscribers$matched)
+
+```
+
+There is a discrepancy of 18 cases between what we have assigned to the experimental pool and what we calculate as final matches among the subscribers. This is a very small amount given the total number of missing data, so, for now, we will proceed with analysis and return to sleuth this problem out during the bounding analysis.
+
+
+
+```{r}
+
+
+## This is a very weird hack to ensure that the newdate column stayed a Date
+subscribers$newdate<-NA
+class(subscribers$newdate)<-"Date"
+for(i in 1:length(subscribers$dateDay)){
+	subscribers$newdate[i]<-getcloseday(subscribers$dateDay[i])
+}
+
+subscribers$batchday2<-NA
+subscribers$batchday2 <- batchdaydat[as.character(subscribers$newdate),"batchday"]
+
+## The unmatched people are distributed unevenly across the batchdays
+with(subscribers[!subscribers$matched,],table(batchday2,exclude=c()))
+
+```
+
+# Save files for analysis
+
+```{r}
+write.csv(wrkdat,file="data/wrkdat.csv")
+write.csv(subscribers,file="data/subscribersPlus.csv")
 ```
