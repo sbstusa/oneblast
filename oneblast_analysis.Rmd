@@ -55,7 +55,463 @@ cmh2 <- mantelhaen.test(bigtab)
 cmh1
 ```
 
-There is a lot of evidence against the idea that all six emails had the same effect. Here are the differences in proportions subscribing after weighting by size of batch.
+There is a lot of evidence against the idea that all six emails had the same effect. 
+
+# Estimate Difference of Proportions
+
+Now we'll start to draw comparisons between specific treatments and groups of treatments. 
+
+In the figure below we show the proportions subscribing in each treatment group with 95-percent confidence intervals. Treatments B and F appear to be the most successful at encouraging subscription to the newsletter.
+
+```{r fig1}
+# Wrapper function to grab proportions and CIs
+prop_fn<-function(x){
+    n<-length(x)
+    success<-sum(x==1)
+    proptest<-prop.test(success,n)
+    c(proptest$estimaate,proptest$conf.int)
+}
+
+# Split data by treatment
+# Apply proportion function to each level of treatment
+# Combine results into data frame for plotting with ggplot
+
+theprops<-as.data.frame(t(matrix(unlist(lapply(split(wrkdat$subscribed,f=wrkdat$treatment),prop_fn)),nrow=3))
+       )
+# Add names and Treatment indicator
+colnames(theprops)<-c("pbar","ll","ul")
+theprops$Treatment<-sort(unique(wrkdat$treatment))
+# Plot with ggplot2
+library(ggplot2)
+dodge<-position_dodge(width = 0.9)
+p.props<-ggplot(theprops,aes(Treatment,pbar,fill=Treatment))+
+    geom_bar(stat = "identity", position = dodge)+
+    geom_errorbar(aes(ymin=ll,ymax=ul),position = dodge,width=.25)+
+    labs(list(y="Proportion Subscribing to Newsletter"))
+p.props
+
+```
+
+
+Next we provide a more formal assessment of the 15 pairwise comparisons by conducting a Tukey Honest Signficant Differences test on an ANOVA model weighted by the size of each batch, with family-wise confidence intervals that reflect the fact that we are making multiple comparisons.
+
+```{r}
+# Anova weighted by size of batch
+a1<-aov(I(subscribed-sBatchAve)~treatmentF,wrkdat)
+# Anova without adjusting for batch
+a1_unweighted<-aov(subscribed~treatmentF,wrkdat)
+# Adjusting for batch reductes size of confidence interval
+apply(TukeyHSD(a1)$treatmentF[,2:3],1,diff)<apply(TukeyHSD(a1_unweighted)$treatmentF[,2:3],1,diff)
+```
+
+We see from the figure that `r sum(TukeyHSD(a1)$treatmentF[,4]<0.05)` out of the `r choose(6,2)` pairwise comparisons are statistically distinguishable from 0 (p<0.05). Specifically, the effects for Treatment F are significantly larger than any other treatment except Treatment B. The effect for Treatment B, although larger than the remaining Treatments (A,C,D and E) is only distinguishable from Treatment C.
+
+```{r figTukey}
+# Get estimates and intervals
+tukey<-data.frame(TukeyHSD(a1)$treatmentF)
+#plot(TukeyHSD(a1))
+tukey$Comparison<-factor(rownames(tukey),levels=rev(rownames(tukey)))
+
+p.tukey<-ggplot(tukey,aes(y=Comparison,x=diff))+
+    geom_vline(xintercept=0,linetype = 2,col="red")+
+    geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
+        geom_point()
+    
+
+p.tukey
+```
+
+# Tests differences in the prespecified subgroups of treatments
+
+
+This section makes the following comparisons:
+
+- A,C,E versus B,D,F (a test of opt-in versus enhanced active).
+- A,B,C,D versus E,F (a test of Block of 10 present versus absent)
+- A,B versus C,D (a test of list versus quiz format)
+
+To make life easier, we'll create indicators of these groupings, write a function to conduct generalized Cochran-Mantel-Haensel tests of these differences, accounting for batch^[We also need to fix some code in the mantelhaen.test to tell R to treat integers as floating point values]
+
+```{r}
+# A,C,E versus B,D,F (a test of opt-in versus enhanced active).
+wrkdat$treat_bdf_01<-as.numeric(grepl("B|D|F",wrkdat$treatment))
+wrkdat$treat_bdf<-factor(ifelse(grepl("B|D|F",wrkdat$treatment),"Enhanced Active","Opt-In"))
+table(wrkdat$treat_bdf)
+# A,B,C,D versus E,F (a test of Block of 10 present versus active)
+wrkdat$treat_abcd_01<-as.numeric(grepl("A|B|C|D",wrkdat$treatment))
+wrkdat$treat_abcd<-ifelse(grepl("A|B|C|D",wrkdat$treatment),"Present","Absent")
+wrkdat$treat_abcd<-factor(wrkdat$treat_abcd,levels=c("Present","Absent"))
+
+# A,B versus C,D (a test of list versus quiz format)
+wrkdat$treat_ab_01<-as.numeric(grepl("A|B",wrkdat$treatment))
+wrkdat$treat_ab_01[!grepl("A|B|C|D",wrkdat$treatment)]<-NA
+wrkdat$treat_ab<-ifelse(wrkdat$treat_ab_01==1,"List","Quiz")
+
+# Update mantel-haenszel test so it can calculate CIs for odds ratio
+
+my.mantelhaen.test<-function (x, y = NULL, z = NULL, alternative = c("two.sided", 
+                                                 "less", "greater"), correct = TRUE, exact = FALSE, conf.level = 0.95) 
+{
+    DNAME <- deparse(substitute(x))
+    if (is.array(x)) {
+        if (length(dim(x)) == 3L) {
+            if (anyNA(x)) 
+                stop("NAs are not allowed")
+            if (any(dim(x) < 2L)) 
+                stop("each dimension in table must be >= 2")
+        }
+        else stop("'x' must be a 3-dimensional array")
+    }
+    else {
+        if (is.null(y)) 
+            stop("if 'x' is not an array, 'y' must be given")
+        if (is.null(z)) 
+            stop("if 'x' is not an array, 'z' must be given")
+        if (any(diff(c(length(x), length(y), length(z))) != 0L)) 
+            stop("'x', 'y', and 'z' must have the same length")
+        DNAME <- paste(DNAME, "and", deparse(substitute(y)), 
+                       "and", deparse(substitute(z)))
+        OK <- complete.cases(x, y, z)
+        x <- factor(x[OK])
+        y <- factor(y[OK])
+        if ((nlevels(x) < 2L) || (nlevels(y) < 2L)) 
+            stop("'x' and 'y' must have at least 2 levels")
+        else x <- table(x, y, z[OK])
+    }
+    if (any(apply(x, 3L, sum) < 2)) 
+        stop("sample size in each stratum must be > 1")
+    I <- dim(x)[1L]
+    J <- dim(x)[2L]
+    K <- dim(x)[3L]
+    if ((I == 2) && (J == 2)) {
+        alternative <- match.arg(alternative)
+        if (!missing(conf.level) && (length(conf.level) != 1 || 
+                                     !is.finite(conf.level) || conf.level < 0 || conf.level > 
+                                     1)) 
+            stop("'conf.level' must be a single number between 0 and 1")
+        NVAL <- c(`common odds ratio` = 1)
+        if (!exact) {
+            s.x <- apply(x, c(1L, 3L), sum)
+            s.y <- apply(x, c(2L, 3L), sum)
+            n <- as.double(apply(x, 3L, sum))
+            DELTA <- sum(x[1, 1, ] - s.x[1, ] * s.y[1, ]/n)
+            YATES <- if (correct && (abs(DELTA) >= 0.5)) 
+                0.5
+            else 0
+            STATISTIC <- ((abs(DELTA) - YATES)^2/sum(apply(rbind(s.x, 
+                                                                 s.y), 2L, prod)/(n^2 * (n - 1))))
+            PARAMETER <- 1
+            if (alternative == "two.sided") 
+                PVAL <- pchisq(STATISTIC, PARAMETER, lower.tail = FALSE)
+            else {
+                z <- sign(DELTA) * sqrt(STATISTIC)
+                PVAL <- pnorm(z, lower.tail = (alternative == 
+                                                   "less"))
+            }
+            names(STATISTIC) <- "Mantel-Haenszel X-squared"
+            names(PARAMETER) <- "df"
+            METHOD <- paste("Mantel-Haenszel chi-squared test", 
+                            if (YATES) 
+                                "with"
+                            else "without", "continuity correction")
+            s.diag <- sum(as.numeric(x[1L, 1L, ] )* as.numeric(x[2L, 2L, ])/n)
+            s.offd <- sum(as.numeric(x[1L, 2L, ]) * as.numeric(x[2L, 1L, ])/n)
+            ESTIMATE <- s.diag/s.offd
+            sd <- sqrt(sum((as.numeric(x[1L, 1L, ]) + as.numeric(x[2L, 2L, ])) * as.numeric(x[1L, 
+                                                                                              1L, ]) * as.numeric(x[2L, 2L, ])/n^2)/(2 * s.diag^2) + sum(((as.numeric(x[1L, 
+                                                                                                                                                                        1L, ]) + as.numeric(x[2L, 2L, ])) * as.numeric(x[1L, 2L, ]) * as.numeric(x[2L, 1L, 
+                                                                                                                                                                                                                                                   ]) + (as.numeric(x[1L, 2L, ]) + as.numeric(x[2L, 1L, ])) * as.numeric(x[1L, 1L, ]) * 
+                                                                                                                                                              as.numeric(x[2L, 2L, ]))/n^2)/(2 * s.diag * s.offd) + sum((as.numeric(x[1L, 
+                                                                                                                                                                                                                                      2L, ]) + as.numeric(x[2L, 1L, ])) * as.numeric(x[1L, 2L, ]) * as.numeric(x[2L, 1L, 
+                                                                                                                                                                                                                                                                                                                 ])/n^2)/(2 * s.offd^2))
+            CINT <- switch(alternative, less = c(0, ESTIMATE * 
+                                                     exp(qnorm(conf.level) * sd)), greater = c(ESTIMATE * 
+                                                                                                   exp(qnorm(conf.level, lower.tail = FALSE) * sd), 
+                                                                                               Inf), two.sided = {
+                                                                                                   ESTIMATE * exp(c(1, -1) * qnorm((1 - conf.level)/2) * 
+                                                                                                                      sd)
+                                                                                               })
+            RVAL <- list(statistic = STATISTIC, parameter = PARAMETER, 
+                         p.value = PVAL)
+        }
+        else {
+            METHOD <- paste("Exact conditional test of independence", 
+                            "in 2 x 2 x k tables")
+            mn <- apply(x, c(2L, 3L), sum)
+            m <- mn[1L, ]
+            n <- mn[2L, ]
+            t <- apply(x, c(1L, 3L), sum)[1L, ]
+            s <- sum(x[1L, 1L, ])
+            lo <- sum(pmax(0, t - n))
+            hi <- sum(pmin(m, t))
+            support <- lo:hi
+            dc <- .Call(C_d2x2xk, K, m, n, t, hi - lo + 1L)
+            logdc <- log(dc)
+            dn2x2xk <- function(ncp) {
+                if (ncp == 1) 
+                    return(dc)
+                d <- logdc + log(ncp) * support
+                d <- exp(d - max(d))
+                d/sum(d)
+            }
+            mn2x2xk <- function(ncp) {
+                if (ncp == 0) 
+                    return(lo)
+                if (ncp == Inf) 
+                    return(hi)
+                sum(support * dn2x2xk(ncp))
+            }
+            pn2x2xk <- function(q, ncp = 1, upper.tail = FALSE) {
+                if (ncp == 0) {
+                    if (upper.tail) 
+                        return(as.numeric(q <= lo))
+                    else return(as.numeric(q >= lo))
+                }
+                if (ncp == Inf) {
+                    if (upper.tail) 
+                        return(as.numeric(q <= hi))
+                    else return(as.numeric(q >= hi))
+                }
+                d <- dn2x2xk(ncp)
+                if (upper.tail) 
+                    sum(d[support >= q])
+                else sum(d[support <= q])
+            }
+            PVAL <- switch(alternative, less = pn2x2xk(s, 1), 
+                           greater = pn2x2xk(s, 1, upper.tail = TRUE), two.sided = {
+                               relErr <- 1 + 10^(-7)
+                               d <- dc
+                               sum(d[d <= d[s - lo + 1] * relErr])
+                           })
+            mle <- function(x) {
+                if (x == lo) 
+                    return(0)
+                if (x == hi) 
+                    return(Inf)
+                mu <- mn2x2xk(1)
+                if (mu > x) 
+                    uniroot(function(t) mn2x2xk(t) - x, c(0, 1))$root
+                else if (mu < x) 
+                    1/uniroot(function(t) mn2x2xk(1/t) - x, c(.Machine$double.eps, 
+                                                              1))$root
+                else 1
+            }
+            ESTIMATE <- mle(s)
+            ncp.U <- function(x, alpha) {
+                if (x == hi) 
+                    return(Inf)
+                p <- pn2x2xk(x, 1)
+                if (p < alpha) 
+                    uniroot(function(t) pn2x2xk(x, t) - alpha, 
+                            c(0, 1))$root
+                else if (p > alpha) 
+                    1/uniroot(function(t) pn2x2xk(x, 1/t) - alpha, 
+                              c(.Machine$double.eps, 1))$root
+                else 1
+            }
+            ncp.L <- function(x, alpha) {
+                if (x == lo) 
+                    return(0)
+                p <- pn2x2xk(x, 1, upper.tail = TRUE)
+                if (p > alpha) 
+                    uniroot(function(t) pn2x2xk(x, t, upper.tail = TRUE) - 
+                                alpha, c(0, 1))$root
+                else if (p < alpha) 
+                    1/uniroot(function(t) pn2x2xk(x, 1/t, upper.tail = TRUE) - 
+                                  alpha, c(.Machine$double.eps, 1))$root
+                else 1
+            }
+            CINT <- switch(alternative, less = c(0, ncp.U(s, 
+                                                          1 - conf.level)), greater = c(ncp.L(s, 1 - conf.level), 
+                                                                                        Inf), two.sided = {
+                                                                                            alpha <- (1 - conf.level)/2
+                                                                                            c(ncp.L(s, alpha), ncp.U(s, alpha))
+                                                                                        })
+            STATISTIC <- c(S = s)
+            RVAL <- list(statistic = STATISTIC, p.value = PVAL)
+        }
+        names(ESTIMATE) <- names(NVAL)
+        attr(CINT, "conf.level") <- conf.level
+        RVAL <- c(RVAL, list(conf.int = CINT, estimate = ESTIMATE, 
+                             null.value = NVAL, alternative = alternative))
+    }
+    else {
+        df <- (I - 1) * (J - 1)
+        n <- m <- double(length = df)
+        V <- matrix(0, nrow = df, ncol = df)
+        for (k in 1:K) {
+            f <- x[, , k]
+            ntot <- sum(f)
+            rowsums <- apply(f, 1L, sum)[-I]
+            colsums <- apply(f, 2L, sum)[-J]
+            n <- n + c(f[-I, -J])
+            m <- m + c(outer(rowsums, colsums, "*"))/ntot
+            V <- V + (kronecker(diag(ntot * colsums, nrow = J - 
+                                         1) - outer(colsums, colsums), diag(ntot * rowsums, 
+                                                                            nrow = I - 1) - outer(rowsums, rowsums))/(ntot^2 * 
+                                                                                                                          (ntot - 1)))
+        }
+        n <- n - m
+        STATISTIC <- c(crossprod(n, qr.solve(V, n)))
+        PARAMETER <- df
+        PVAL <- pchisq(STATISTIC, PARAMETER, lower.tail = FALSE)
+        names(STATISTIC) <- "Cochran-Mantel-Haenszel M^2"
+        names(PARAMETER) <- "df"
+        METHOD <- "Cochran-Mantel-Haenszel test"
+        RVAL <- list(statistic = STATISTIC, parameter = PARAMETER, 
+                     p.value = PVAL)
+    }
+    RVAL <- c(RVAL, list(method = METHOD, data.name = DNAME))
+    class(RVAL) <- "htest"
+    return(RVAL)
+}
+
+
+table.maker<-function(x){
+    # Input:
+    # x = treatment indicator
+    # Output:
+    # table of descriptive statistics and tests
+    
+    
+    # Difference of Proportions
+     test<-stats::prop.test(table(x,wrkdat$subscribed)[,c(2,1)])
+     diff<- sprintf("%.4f",round(test$estimate[1]-test$estimate[2],4))
+     pval<- sprintf("%.4f",round(test$p.value,4))
+    # MH Test using BatchDay
+    mhtest<-my.mantelhaen.test(table(x,wrkdat$subscribed,wrkdat$batchday2F))
+    mhtest.pval<-sprintf("%.4f",round(mhtest$p.value,4))
+    mhtest.stat<-sprintf("%.4f",round(mhtest$statistic,4))
+    mhtest.or<-sprintf("%.4f",round(mhtest$estimate,4))
+    mhtest.or.ci<-paste("[",paste(round(mhtest$conf.int,3),collapse = "; "),"]",sep="")
+    # 
+    cmh_approx<-cmh_test(subscribedF~x|batchday2F,data=wrkdat,distribution=approximate(B=1000))
+    cmh_approx.stat<-sprintf("%.4f",statistic(cmh_bdf_approx))
+    cmh_approx.pval<-sprintf("%.4f",pvalue(cmh_bdf_approx))
+    
+    
+    tab<-rbind(table(x),
+            table(wrkdat$subscribe,x),
+            paste("**",round(unlist(lapply(split(wrkdat$subscribed,f=x),mean)),4),"**",sep=""),c(" "," "),
+            c("*Statistic*","*p-value [CI]*"),
+            c(diff,pval),
+            c( mhtest.stat,mhtest.pval),
+            c(cmh_approx.stat,cmh_approx.pval),
+            c( mhtest.or,mhtest.or.ci)
+            )
+    rownames(tab)<-c("**Sample**","Subscribed","Not Subscribed","Proportion Subscribing","___","**Test**","Difference in Proportions","CMH Test","Approx CMH Test  ","Common Odds Ratio")
+    colnames(tab)<-paste("**",colnames(tab),"**",sep="")
+    return(tab)
+
+
+}
+
+```
+
+
+## A,C,E versus B,D,F (a test of opt-in versus enhanced active).
+
+```{r}
+tab_bdf<-table.maker(wrkdat$treat_bdf)
+kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
+```
+
+# A,B,C,D versus E,F (a test of Block of 10 present versus active)
+
+```{r tababcd,results="asis"}
+# A,B,C,D versus E,F (a test of Block of 10 present versus active)
+
+tab_abcd<-table.maker(wrkdat$treat_abcd)
+kable(tab_abcd,caption="Block of 10 Present or Absent")
+
+
+```
+
+# A,B versus C,D (a test of list versus quiz format)
+
+```{r tabab,results="asis"}
+# A,B versus C,D (a test of list versus quiz format)
+
+tab_ab<-table.maker(wrkdat$treat_ab)
+kable(tab_ab)
+
+```
+
+
+# Assess sensitivity of the results to different ways of distributing
+
+```{r}
+# List of unmatchables by batch day
+unmatchables<-data.frame(batchday2=sort(unique(wrkdat$batchday2)),
+             count=c(24,6,14,33,20,24,19,38,8,18,8,99,14,23,20,48,16,12,22,44,16,53,12,26,40,13,64,23,54,24,29,15,52,10,11,65,22,25,40,10,81))
+unmatchables
+
+
+# Functio to randomly reassign unmatched cases by batch day
+data_fn<-function(x="treatmentF"){
+    # Split data in subscribers and non subscribers
+    newdat<-wrkdat[,c("subscribedF","batchday2F",x)]
+    newdat<-newdat[order(newdat$batchday2F),]
+    newdat_1<-newdat[newdat$subscribed==1,]
+    newdat_1$subscribed_bnd<-newdat_1$subscribed
+    newdat_0<-newdat[newdat$subscribed==0,]
+    newdat_0$subscribed_bnd<-unlist(mapply(batch_assign_fn,batch=unmatchables[,1],size=unmatchables[,2]))
+    stopifnot(table(newdat_0$subscribed_bnd,newdat_0$batchday2F)[2,]==unmatchables[,2])
+    # Recombine
+    newdat<-rbind(newdat_1,newdat_0)
+    return(newdat)
+}
+
+# Function to Simulate CMH Tests
+
+sim_cmh_fn<-function(treat){
+    # Generate data
+    df<-data_fn(x=treat)
+    # Write formula 
+    f <- reformulate(paste(treat,"|batchday2F"),response="subscribed_bnd")
+    # CMH Test, use asymptotic results for now for now
+    cmh<-cmh_test(f,data=df)
+    # Collect test stat and pvalue
+    stat<-statistic(cmh)
+    pval<-pvalue(cmh)
+    return(cbind(stat,pval))
+}
+
+# Use mosaic's do wrapper
+
+# Set seed
+set.seed(123)
+# Number of simulations
+nsim<-100 
+
+sim_cmh_all<-do(nsim)*sim_cmh_fn(treat="treatmentF")
+sim_cmh_bdf<-do(nsim)*sim_cmh_fn(treat="treat_bdf")
+sim_cmh_abcd<-do(nsim)*sim_cmh_fn(treat="treat_abcd")
+sim_cmh_ab<-do(nsim)*sim_cmh_fn(treat="treat_ab")
+
+
+# Simulate Tukey Comparisons
+
+sim_tukey_fn<-function(treat="treatmentF"){
+    df<-data_fn(x=treat)
+    df$subscribed_bnd<-as.numeric(df$subscribed_bnd)
+    df$sBatchAve<-ave(df$subscribed_bnd,df$batchday2F)
+    a1<-aov(I(subscribed_bnd-sBatchAve)~treatmentF,df)
+    tukey<-data.frame(TukeyHSD(a1)$treatmentF)
+    tukey$Comparison<-factor(rownames(tukey),levels=rev(rownames(tukey)))
+    return(tukey)
+}
+sim_tukey<-do(nsim)*sim_tukey_fn()
+
+
+
+```
+
+
+
+OLDER STUFF BELOW
+
+Here are the differences in proportions subscribing after weighting by size of batch.
 
 see <https://htmlpreview.github.io/?https://github.com/acoppock/Green-Lab-SOP/blob/master/Green_Lab_SOP.html#taking-block-randomization-into-account-in-ses-and-cis>
 
@@ -65,19 +521,72 @@ see <https://htmlpreview.github.io/?https://github.com/acoppock/Green-Lab-SOP/bl
 options(width=132,digits=6,scipen=8)
 wrkdat$sBatchAve<-ave(wrkdat$subscribed,wrkdat$batchday2F)
 lm1<-lm(I(subscribed-sBatchAve)~treatment,data=wrkdat)
-coef(lm1)
-
 
 ```
 
 
 
 
+```{r}
+# 
+# # Playing around with getting pairwise comparisons from lm
+# 
+# # Helper function
+# 
+# table_maker<-function(x=wrkdat$treatmentF){
+#     k<-length(levels(x))
+#     levs<-levels(x)
+#     # Comparisons
+#     comp<-choose(k,2)
+#     # Matrix for comparisons
+#     out<-matrix(NA,ncol=4,nrow=comp)
+#     rows<-NULL
+#     # Row names
+#     for(i in 1:(k-1)){
+#         for(j in (i+1):k){
+#             rows<-c(rows,paste(levs[j],levs[i],sep="-"))
+#         }
+#     }
+#     rownames(out)<-rows
+#     colnames(out)<-c("diff","lwr","upr","p value")
+#     return(out)
+# }
+# table_maker()
+# pairwise_lm<-function(x=wrkdat$treatmentF, adj="holm"){
+#     # matrix to store output
+#     out<-table_maker()
+#     k<-length(levels(x))
+#     # Loop through comparisons
+#     coefs<-NULL
+#     pvals<-NULL
+#     ci<-NULL
+# 
+#     for(i in 2:k){
+#     # Fit model
+#         fm<-lm(I(subscribed-sBatchAve)~relevel(treatmentF,ref=i-1),wrkdat)
+#     # Differences
+#     coefs<-c(coefs,coeftest(fm)[i:k,1])
+#     # P values
+#     pvals<-c(pvals,p.adjust(coeftest(fm)[i:k,4],adj,n = choose(k,2)))
+#     # Confidence intervals
+#     ci<-rbind(ci,confint(fm)[i:k,])
+# 
+#     }
+#     out[,1]<-coefs
+#     out[,4]<-pvals
+#     out[,2:3]<-ci
+#  return(out)   
+# }
+# pairwise_lm(adj="holm")
+```
 
-OLDER STUFF BELOW
+
+
+
+
 ```{r}
 # Reorder as factor for prop tests
-wrkdat$subscribe<-ifelse(wrkdat$subscribe01==1,"Subscribed","Not Subscribed")
+wrkdat$subscribe<-ifelse(wrkdat$subscribed==1,"Subscribed","Not Subscribed")
 wrkdat$subscribe<-factor(wrkdat$subscribe,levels=c("Subscribed","Not Subscribed"))
 ```
 
@@ -179,28 +688,7 @@ kable(tab_pw_props_none,
 
 
 ```{r tablemaker}
-# Function to make tables
-table.maker<-function(x){
-    # Difference of Proportions
-     test<-stats::prop.test(table(x,wrkdat$subscribe01)[,c(2,1)])
-     diff<- sprintf("%.4f",round(test$estimate[1]-test$estimate[2],5))
-     pval<- sprintf("%.4f",round(test$p.value,5))
-    # MH Test using Batch
-    mhtest<-mantelhaen.test(table(x,wrkdat$subscribe,wrkdat$Batch))
-    mhtest.pval<-sprintf("%.3f",round(mhtest$p.value,3))
-    mhtest.stat<-sprintf("%.3f",round(mhtest$statistic,3))
-    tab<-rbind(table(x),
-            table(wrkdat$subscribe,x),
-            paste("**",round(unlist(lapply(split(wrkdat$subscribe01,f=x),mean)),4),"**",sep=""),c(" "," "),
-            c("*Statistic*","*p-value*"),
-            c(diff,pval),
-            c( mhtest.stat,mhtest.pval))
-    rownames(tab)<-c("**Sample**","Subscribed","Not Subscribed","Proportion Subscribing","___","**Test**","Difference in Proportions"," CMH $\\chi^2$ Test")
-    colnames(tab)<-paste("**",colnames(tab),"**",sep="")
-    return(tab)
 
-
-}
 ```
 
 This section makes the following comparisons:
@@ -218,48 +706,9 @@ For each comparison, the tables present:
 Ovearll rates of subscription are higher:
 
 - In treatment conditions with enhanced active choice (B,D,F) rather than a single opt-in (A,C,E)
-- In treamtn conditions where the block 10 is absent (E,F) rather than present (A,B,C,D)
+- In treatment conditions where the block 10 is absent (E,F) rather than present (A,B,C,D)
 - In treament conditions that present information in a list format (A,B) rather than a quiz format (C,D).
 
-# A,C,E versus B,D,F (a test of opt-in versus enhanced active).
-
-```{r tabbdf, results="asis"}
-# A,C,E versus B,D,F (a test of opt-in versus enhanced active).
-
-wrkdat$treat_bdf_01<-as.numeric(grepl("B|D|F",wrkdat$treatment))
-wrkdat$treat_bdf<-ifelse(grepl("B|D|F",wrkdat$treatment),"Enhanced Active","Opt-In")
-tab_bdf<-table.maker(wrkdat$treat_bdf)
-kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
-
-```
-
-# A,B,C,D versus E,F (a test of Block of 10 present versus active)
-
-```{r tababcd,results="asis"}
-# A,B,C,D versus E,F (a test of Block of 10 present versus active)
-
-wrkdat$treat_abcd_01<-as.numeric(grepl("A|B|C|D",wrkdat$treatment))
-wrkdat$treat_abcd<-ifelse(grepl("A|B|C|D",wrkdat$treatment),"Present","Absent")
-wrkdat$treat_abcd<-factor(wrkdat$treat_abcd,levels=c("Present","Absent"))
-tab_abcd<-table.maker(wrkdat$treat_abcd)
-kable(tab_abcd,caption="Block of 10 Present or Absent")
-
-
-```
-
-# A,B versus C,D (a test of list versus quiz format)
-
-```{r tabab,results="asis"}
-# A,B versus C,D (a test of list versus quiz format)
-
-wrkdat$treat_ab_01<-as.numeric(grepl("A|B",wrkdat$treatment))
-wrkdat$treat_ab_01[!grepl("A|B|C|D",wrkdat$treatment)]<-NA
-wrkdat$treat_ab<-ifelse(wrkdat$treat_ab_01==1,"List","Quiz")
-
-tab_ab<-table.maker(wrkdat$treat_ab)
-kable(tab_ab)
-
-```
 
 # Instances of Multiple Names
 
