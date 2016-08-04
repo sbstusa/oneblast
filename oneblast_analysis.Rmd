@@ -69,13 +69,13 @@ prop_fn<-function(x){
     n<-length(x)
     success<-sum(x==1)
     proptest<-prop.test(success,n)
-    c(proptest$estimaate,proptest$conf.int)
+    return(c(proptest$estimate,proptest$conf.int))
 }
 
 # Split data by treatment
 # Apply proportion function to each level of treatment
 # Combine results into data frame for plotting with ggplot
-
+table(wrkdat$treatment)
 theprops<-as.data.frame(t(matrix(unlist(lapply(split(wrkdat$subscribed,f=wrkdat$treatment),prop_fn)),nrow=3))
        )
 # Add names and Treatment indicator
@@ -95,7 +95,8 @@ p.props
 
 Next we provide a more formal assessment of the 15 pairwise comparisons by conducting a Tukey Honest Signficant Differences test on an ANOVA model weighted by the size of each batch, with family-wise confidence intervals that reflect the fact that we are making multiple comparisons.
 
-```{r}
+```{r tukeyHSD}
+wrkdat$sBatchAve<-ave(wrkdat$subscribed,wrkdat$batchday2F)
 # Anova weighted by size of batch
 a1<-aov(I(subscribed-sBatchAve)~treatmentF,wrkdat)
 # Anova without adjusting for batch
@@ -109,13 +110,14 @@ We see from the figure that `r sum(TukeyHSD(a1)$treatmentF[,4]<0.05)` out of the
 ```{r figTukey}
 # Get estimates and intervals
 tukey<-data.frame(TukeyHSD(a1)$treatmentF)
-#plot(TukeyHSD(a1))
+plot(TukeyHSD(a1))
 tukey$Comparison<-factor(rownames(tukey),levels=rev(rownames(tukey)))
 
 p.tukey<-ggplot(tukey,aes(y=Comparison,x=diff))+
     geom_vline(xintercept=0,linetype = 2,col="red")+
     geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
-        geom_point()
+        geom_point()+
+    labs(x="Difference in proportions",title="95% family-wise confidence level")
     
 
 p.tukey
@@ -132,7 +134,7 @@ This section makes the following comparisons:
 
 To make life easier, we'll create indicators of these groupings, write a function to conduct generalized Cochran-Mantel-Haensel tests of these differences, accounting for batch^[We also need to fix some code in the mantelhaen.test to tell R to treat integers as floating point values]
 
-```{r}
+```{r subgroup}
 # A,C,E versus B,D,F (a test of opt-in versus enhanced active).
 wrkdat$treat_bdf_01<-as.numeric(grepl("B|D|F",wrkdat$treatment))
 wrkdat$treat_bdf<-factor(ifelse(grepl("B|D|F",wrkdat$treatment),"Enhanced Active","Opt-In"))
@@ -145,7 +147,7 @@ wrkdat$treat_abcd<-factor(wrkdat$treat_abcd,levels=c("Present","Absent"))
 # A,B versus C,D (a test of list versus quiz format)
 wrkdat$treat_ab_01<-as.numeric(grepl("A|B",wrkdat$treatment))
 wrkdat$treat_ab_01[!grepl("A|B|C|D",wrkdat$treatment)]<-NA
-wrkdat$treat_ab<-ifelse(wrkdat$treat_ab_01==1,"List","Quiz")
+wrkdat$treat_ab<-factor(ifelse(wrkdat$treat_ab_01==1,"List","Quiz"))
 
 # Update mantel-haenszel test so it can calculate CIs for odds ratio
 
@@ -386,12 +388,12 @@ table.maker<-function(x){
     mhtest.or.ci<-paste("[",paste(round(mhtest$conf.int,3),collapse = "; "),"]",sep="")
     # 
     cmh_approx<-cmh_test(subscribedF~x|batchday2F,data=wrkdat,distribution=approximate(B=1000))
-    cmh_approx.stat<-sprintf("%.4f",statistic(cmh_bdf_approx))
-    cmh_approx.pval<-sprintf("%.4f",pvalue(cmh_bdf_approx))
+    cmh_approx.stat<-sprintf("%.4f",statistic(cmh_approx))
+    cmh_approx.pval<-sprintf("%.4f",pvalue(cmh_approx))
     
     
     tab<-rbind(table(x),
-            table(wrkdat$subscribe,x),
+            table(wrkdat$subscribed,x),
             paste("**",round(unlist(lapply(split(wrkdat$subscribed,f=x),mean)),4),"**",sep=""),c(" "," "),
             c("*Statistic*","*p-value [CI]*"),
             c(diff,pval),
@@ -411,7 +413,7 @@ table.maker<-function(x){
 
 ## A,C,E versus B,D,F (a test of opt-in versus enhanced active).
 
-```{r}
+```{r tabbdf,results="asis"}
 tab_bdf<-table.maker(wrkdat$treat_bdf)
 kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
 ```
@@ -438,16 +440,26 @@ kable(tab_ab)
 ```
 
 
-# Assess sensitivity of the results to different ways of distributing
+# Assess sensitivity of the results to different ways of distributing unmatched cases
 
-```{r}
+The table below shows the number of unmatched cases by batch day in the list of subscribers (i.e. people shown as suscribing who we were unable to match to the experimental pool by either email, full name, or last name).
+
+```{r unmatch}
 # List of unmatchables by batch day
 unmatchables<-data.frame(batchday2=sort(unique(wrkdat$batchday2)),
              count=c(24,6,14,33,20,24,19,38,8,18,8,99,14,23,20,48,16,12,22,44,16,53,12,26,40,13,64,23,54,24,29,15,52,10,11,65,22,25,40,10,81))
-unmatchables
+tab_unmatch<-unmatchables
+colnames(tab_unmatch)<-c("Batch","Unmatched Cases")
+kable(tab_unmatch,caption="Unmatched cases by batch")
+```
 
+It is possible that these unmatched cases represent "successful" interventions, however in the analysis above, they were treated as "failueres" (i.e. non-subscribers). In this section, we assess the consequences of that assumption through a series of simulations that ask what would our results look like had we been able to match these subscribers to members of the experimental pool.
 
-# Functio to randomly reassign unmatched cases by batch day
+The code below generates a simulated dataset, in which, for each batch, are randomly assigned as being subscribers. 
+
+```{r sensitivity}
+# 
+# Function to randomly reassign unmatched cases by batch day
 data_fn<-function(x="treatmentF"){
     # Split data in subscribers and non subscribers
     newdat<-wrkdat[,c("subscribedF","batchday2F",x)]
@@ -455,12 +467,48 @@ data_fn<-function(x="treatmentF"){
     newdat_1<-newdat[newdat$subscribed==1,]
     newdat_1$subscribed_bnd<-newdat_1$subscribed
     newdat_0<-newdat[newdat$subscribed==0,]
+    batch_assign_fn<-function(batch,size){
+x<-newdat_0$subscribed[newdat_0$batchday2F==batch]
+x<-replace(newdat_0$subscribed[newdat_0$batchday2F==batch],sample(1:length(newdat_0$subscribed[newdat_0$batchday2F==batch]),size),1)
+return(x)
+}
     newdat_0$subscribed_bnd<-unlist(mapply(batch_assign_fn,batch=unmatchables[,1],size=unmatchables[,2]))
     stopifnot(table(newdat_0$subscribed_bnd,newdat_0$batchday2F)[2,]==unmatchables[,2])
     # Recombine
     newdat<-rbind(newdat_1,newdat_0)
     return(newdat)
 }
+```
+
+So for example, we know that in the first batch, 24 cases in the subscribe list are unmatchable. In the each simulated dataset 24 cases in batch 1 are randomly assigned to be treated. In the code below, we see one simulation where for batch 1, treatment groups A and B receive three extra subscribers, C recieves five, D four, E seven, and F two.
+
+
+
+
+```{r examp}
+set.seed(123)
+example.df<-data_fn()
+with(wrkdat,table(subscribedF,batchday2F))
+with(example.df,table(subscribed_bnd,batchday2F))
+
+# Change in subscribers for batch 1 in 1 simulation
+with(example.df[example.df$batchday2F==1,],table(subscribed_bnd,treatmentF))-
+with(wrkdat[wrkdat$batchday2F==1,],table(subscribedF,treatmentF))
+
+
+
+     
+```
+
+Next we generate 1000 simulated datasets. Each time the unmatched cases in each batch are randomly assigned to be subscribers. For each simulated dataselt, we re-run the tests above (namely the generalized CMH tests and the Tukey HSD test pairwise comparisons) and save the results. 
+
+
+```{r cmhSim,results="asis"}
+
+# Set seed
+set.seed(123)
+# Number of simulations
+nsim<-1000 
 
 # Function to Simulate CMH Tests
 
@@ -477,19 +525,53 @@ sim_cmh_fn<-function(treat){
     return(cbind(stat,pval))
 }
 
-# Use mosaic's do wrapper
 
-# Set seed
-set.seed(123)
-# Number of simulations
-nsim<-100 
+
+# Use mosaic's do wrapper
+library(mosaic)
 
 sim_cmh_all<-do(nsim)*sim_cmh_fn(treat="treatmentF")
+sim_cmh_all$Comparison<-"All Treatments"
 sim_cmh_bdf<-do(nsim)*sim_cmh_fn(treat="treat_bdf")
+sim_cmh_bdf$Comparison<-"BDF vs ACE"
 sim_cmh_abcd<-do(nsim)*sim_cmh_fn(treat="treat_abcd")
+sim_cmh_abcd$Comparison<-"ABCD vs EF"
 sim_cmh_ab<-do(nsim)*sim_cmh_fn(treat="treat_ab")
+sim_cmh_ab$Comparison<-"AB vs CD"
+
+# Combine results for plotting and summary
+sim_cmh<-rbind(
+    sim_cmh_all,
+    sim_cmh_bdf,
+    sim_cmh_abcd,
+    sim_cmh_ab
+    
+)
+sim_cmh$Comparison<-factor(sim_cmh$Comparison,levels=c("All Treatments",
+                                                       "BDF vs ACE",
+                                                       "ABCD vs EF",
+                                                       "AB vs CD"
+                                                       ))
+# Percent of tests yielding significant differnces
+library(plyr)
+tab_sim_cmh<-ddply(sim_cmh,.(Comparison),summarize,
+                   Percent=mean(pval<0.05)*100
+                   
+                   )
+kable(tab_sim_cmh[,c("Comparison","Percent")],
+      caption ="Percent of Simulations Yielding Significant Difference" )
+```
 
 
+```{r figCMHsim}
+p_sim_cmh_all<-ggplot(sim_cmh,aes(pval))+geom_density(bw=1/2000)+geom_rug()+facet_wrap(~Comparison)+labs(title="Distribution of p-values from CMH simulations")
+p_sim_cmh_all
+
+
+```
+
+
+```{r tukeySim}
 # Simulate Tukey Comparisons
 
 sim_tukey_fn<-function(treat="treatmentF"){
@@ -502,243 +584,35 @@ sim_tukey_fn<-function(treat="treatmentF"){
     return(tukey)
 }
 sim_tukey<-do(nsim)*sim_tukey_fn()
+library(plyr)
+
+sim_tukey_df<-ddply(sim_tukey,.(Comparison),summarize,
+                    diff=mean(diff),
+                    lwr=mean(lwr),
+                    upr=mean(upr),
+                    Percent=mean(p.adj<.05)*100
+                    )
+
+kable(sim_tukey_df[,c("Comparison","Percent")],
+      caption ="Percent of Simulations Yielding Significant Difference" )
+
+```
+
+```{r figTukeypval}
+p_pw_pval_sim<-ggplot(sim_tukey,aes(p.adj,col=Comparison))+geom_density(bw=1/100)+facet_wrap(~ Comparison)+geom_rug()+labs(x=paste(nsim,"simulated p-values from pairwise comparison"),title="Distribution of p-values from Tukey HSD simulations")
+p_pw_pval_sim
+```
+
+```{r figTukeycoef}
+p_tukey_sim<-ggplot(sim_tukey_df,aes(y=Comparison,x=diff))+
+    geom_vline(xintercept=0,linetype = 2,col="red")+
+    geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
+        geom_point()+ labs(x="Difference in proportions",title="95% family-wise confidence level from Tukey HSD Simulations")
+
+p_tukey_sim
 
 
 
 ```
 
-
-
-OLDER STUFF BELOW
-
-Here are the differences in proportions subscribing after weighting by size of batch.
-
-see <https://htmlpreview.github.io/?https://github.com/acoppock/Green-Lab-SOP/blob/master/Green_Lab_SOP.html#taking-block-randomization-into-account-in-ses-and-cis>
-
-
-```{r}
-## Probably junk, harmonic weighted differences of means here.
-options(width=132,digits=6,scipen=8)
-wrkdat$sBatchAve<-ave(wrkdat$subscribed,wrkdat$batchday2F)
-lm1<-lm(I(subscribed-sBatchAve)~treatment,data=wrkdat)
-
-```
-
-
-
-
-```{r}
-# 
-# # Playing around with getting pairwise comparisons from lm
-# 
-# # Helper function
-# 
-# table_maker<-function(x=wrkdat$treatmentF){
-#     k<-length(levels(x))
-#     levs<-levels(x)
-#     # Comparisons
-#     comp<-choose(k,2)
-#     # Matrix for comparisons
-#     out<-matrix(NA,ncol=4,nrow=comp)
-#     rows<-NULL
-#     # Row names
-#     for(i in 1:(k-1)){
-#         for(j in (i+1):k){
-#             rows<-c(rows,paste(levs[j],levs[i],sep="-"))
-#         }
-#     }
-#     rownames(out)<-rows
-#     colnames(out)<-c("diff","lwr","upr","p value")
-#     return(out)
-# }
-# table_maker()
-# pairwise_lm<-function(x=wrkdat$treatmentF, adj="holm"){
-#     # matrix to store output
-#     out<-table_maker()
-#     k<-length(levels(x))
-#     # Loop through comparisons
-#     coefs<-NULL
-#     pvals<-NULL
-#     ci<-NULL
-# 
-#     for(i in 2:k){
-#     # Fit model
-#         fm<-lm(I(subscribed-sBatchAve)~relevel(treatmentF,ref=i-1),wrkdat)
-#     # Differences
-#     coefs<-c(coefs,coeftest(fm)[i:k,1])
-#     # P values
-#     pvals<-c(pvals,p.adjust(coeftest(fm)[i:k,4],adj,n = choose(k,2)))
-#     # Confidence intervals
-#     ci<-rbind(ci,confint(fm)[i:k,])
-# 
-#     }
-#     out[,1]<-coefs
-#     out[,4]<-pvals
-#     out[,2:3]<-ci
-#  return(out)   
-# }
-# pairwise_lm(adj="holm")
-```
-
-
-
-
-
-```{r}
-# Reorder as factor for prop tests
-wrkdat$subscribe<-ifelse(wrkdat$subscribed==1,"Subscribed","Not Subscribed")
-wrkdat$subscribe<-factor(wrkdat$subscribe,levels=c("Subscribed","Not Subscribed"))
-```
-
-
-The primary dataset in this analysis contains `r dim(data)[1]` study participants, each randomly assigned to receive one of six treatment emails
-
-- `r dim(data)[1]` participants
-- `r dim(subscribers)[1]` subscribers
-- `r sum(wrkdat$emailhash%in%subscribers$emailhash)` participants in list of subscribers
-    - `r dim(subscribers)[1]-sum(wrkdat$emailhash%in%subscribers$emailhash)` emails in list of subcriber different from emails in list of participants
-
-
-# Outcome
-
-
-The outcome is whether participants subscribed to the newsletter. It was constructed in the following way: First subscribers were identified by matching their unique email address in the design dataset to a list of  `r dim(subscribers)[1]` subscribers' emails.  Additional subscribers were identified by then matching on first and last names in each dataset. Some names appear multiple times in each dataset. These cases, where a single subscriber name is matched to multiple participants with the same name, are then recoded as NA for the primary analysis. We assess the sensitivity of our results to different categorizations of the roughly 140 people who we excluded from the analysis because of unclear treatment assignment below. In total, using email address and names, we are able to match `r sum(wrkdat$subscribe01==1)` participants to the list of subscribers (i.e. `r round( sum(wrkdat$subscribe01==1)/dim(subscribers)[1]*100,1)`\% of subscribers).
-
-
-
-
-
-# Randomization Assessment
-
-```{r ra,results="asis"}
-tab0<-data.frame(Treatement=names(table(wrkdat$treatment)),
-                                  N=matrix(table(wrkdat$treatment)))
-knitr::kable(tab0)
-table(wrkdat$treatment,wrkdat$Batch,exclude=c())
-```
-
-
-- Treatment appears to have been administred in 82 batches of 6000 participants with the exception of batch 82, which was sent  `r table(wrkdat$Batch)[82]` recipients.
-
-
-# Comparisons Across Newsletters
-
-```{r pwcomp}
-# Holm
-pw_props_holm<-with(data,pairwise.prop.test(table(treatment,subscribe01)[,c(2,1)],
-                                       p.adjust.method = "holm"
-                                       ))
-# No correction
-pw_props_none<-with(data,pairwise.prop.test(table(treatment,subscribe01)[,c(2,1)],
-                                       p.adjust.method = "none"
-                                       ))
-```
-
-
-The tables below show:
-
-- The raw counts and proportions of people subscribing by treatment status
-- The p-values from pairwise comparisons of these proportions using the Holm (1979) correction for multiple comparisons, as well as wihtout any adjustments.
-
-Overall subscription rates are low (~1 percent). The differences between conditions are also small (about one to two tenths of a percent). Using the Holm correction for multiple comparisons, `r sum(pw_props_holm$p.value<0.05,na.rm=T)` of the 15 comparisons are statistically significant (p<0.05, 8 p<0.06, and  `r sum(pw_props_none$p.value<0.05,na.rm=T)` without adjusting for multiple comparisons).
-
-## Proportion Subscribing  by Treatment Status
-```{r tab1,results="asis"}
-# Proportion Subscribing by Treatment
-tab1<-rbind(table(wrkdat$treatment),
-            table(wrkdat$subscribe,wrkdat$treatment),
-            paste("**",round(unlist(lapply(split(wrkdat$subscribe01,f=wrkdat$treatment),mean)),4),"**",sep=""))
-rownames(tab1)<-c("N","Subscribed","Not Subscribed","**Proportion Subscribing**")
-kable(tab1,caption="Proprortion Subscribing by Treatment Status")
-```
-
-## P-Values for Pairwise Comparison of Proportions (Holm Correction)
-
-```{r tab2,results="asis"}
-
-
-
-tab_pw_props_holm<-matrix(sprintf("%.4f",round(pw_props_holm$p.value,5)),5,5)
-colnames(tab_pw_props_holm)<-colnames(pw_props_holm$p.value)
-rownames(tab_pw_props_holm)<-rownames(pw_props_holm$p.value)
-tab_pw_props_holm[tab_pw_props_holm=="NA"] <- ""
-
-kable(tab_pw_props_holm,
-      caption="Pairwise comparisons using Pairwise comparison of proportions (Holm Correction)")
-
-```
-
-
-## P-Values for Pairwise Comparison of Proportions (No Correction for Multiple Comparisons)
-
-```{r tab3,results="asis"}
-
-tab_pw_props_none<-matrix(sprintf("%.4f",round(pw_props_none$p.value,5)),5,5)
-colnames(tab_pw_props_none)<-colnames(pw_props_none$p.value)
-rownames(tab_pw_props_none)<-rownames(pw_props_none$p.value)
-tab_pw_props_none[tab_pw_props_none=="NA"] <- ""
-
-kable(tab_pw_props_none,
-      caption="Pairwise comparisons using Pairwise comparison of proportions (Holm Correction)")
-
-
-```
-
-# Comparisons Across Treatment Type
-
-
-```{r tablemaker}
-
-```
-
-This section makes the following comparisons:
-
-- A,C,E versus B,D,F (a test of opt-in versus enhanced active).
-- A,B,C,D versus E,F (a test of Block of 10 present versus active)
-- A,B versus C,D (a test of list versus quiz format)
-
-For each comparison, the tables present:
-
-- The raw counts and proportions of people subscribing by treatment status
-- A test of the difference in proportions
-- A test of the difference using the Cochran-Mantel-Haenszel Chi-Squared Test for Count Data treating each batch as separate strata.
-
-Ovearll rates of subscription are higher:
-
-- In treatment conditions with enhanced active choice (B,D,F) rather than a single opt-in (A,C,E)
-- In treatment conditions where the block 10 is absent (E,F) rather than present (A,B,C,D)
-- In treament conditions that present information in a list format (A,B) rather than a quiz format (C,D).
-
-
-# Instances of Multiple Names
-
-## Design Data
-
-```{r, results="asis"}
-kable(tab_names_data)
-```
-
-## Subscriber Data
-
-```{r, results="asis"}
-kable(tab_names_sub)
-```
-
-
-# Code
-
-```{r, echo=T,eval=F}
-<<init>>
-<<setup>>
-<<clean>>
-<<ra>>
-<<pwcomp>>
-<<tab1>>
-<<tab2>>
-<<tab3>>
-<<tablemaker>>
-<<tabbdf>>
-<<tababcd>>
-<<tabab>>
-```
 
