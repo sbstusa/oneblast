@@ -28,7 +28,7 @@ subscribers<-read.csv("data/subscribersPlus.csv",as.is=TRUE)
 
 The outcome is whether or not a member of the experimental pool subscribed to the newsletter. We currently assume that all members of the experimental pool who have a 0 for subscribed did not subscribe under a different name and email address. We return to scrutinize the effect of this assumption later.
 
-```{r}
+```{r dv}
 # Use this as the primary DV
 table(wrkdat$subscribed,exclude=c())
 ```
@@ -37,7 +37,7 @@ Because the experiment was randomized by batch, and because of trouble matching 
 
 Do we have enough information to reject the claim that there are no differences between the treatments? We use the generalized Cochran-Mantel-Haensel test to address this question. We are using the coin library because it allows for easy assessment of this test without large sample assumptions.
 
-```{r}
+```{r cmh}
 library(coin)
 
 wrkdat$batchday2F<-factor(wrkdat$batchday2)
@@ -80,16 +80,23 @@ theprops<-as.data.frame(t(matrix(unlist(lapply(split(wrkdat$subscribed,f=wrkdat$
        )
 # Add names and Treatment indicator
 colnames(theprops)<-c("pbar","ll","ul")
-theprops$Treatment<-sort(unique(wrkdat$treatment))
+theprops$Treatment<-c("Opt-in; List",
+                      "Active; List",
+                      "Opt-in; Quiz",
+                      "Active; Quiz",
+                      "Opt-in",
+                      "Active"
+                      )
 # Plot with ggplot2
 library(ggplot2)
 dodge<-position_dodge(width = 0.9)
 p.props<-ggplot(theprops,aes(Treatment,pbar,fill=Treatment))+
     geom_bar(stat = "identity", position = dodge)+
     geom_errorbar(aes(ymin=ll,ymax=ul),position = dodge,width=.25)+
-    labs(list(y="Proportion Subscribing to Newsletter"))
+    labs(list(y="Proportion Subscribing to Newsletter",
+         title="Proportion Subscribing by Treatment Group"))+ theme(
+  axis.text.x = element_blank(),axis.ticks.x = element_blank())
 p.props
-
 ```
 
 
@@ -448,6 +455,7 @@ The table below shows the number of unmatched cases by batch day in the list of 
 # List of unmatchables by batch day
 unmatchables<-data.frame(batchday2=sort(unique(wrkdat$batchday2)),
              count=c(24,6,14,33,20,24,19,38,8,18,8,99,14,23,20,48,16,12,22,44,16,53,12,26,40,13,64,23,54,24,29,15,52,10,11,65,22,25,40,10,81))
+
 tab_unmatch<-unmatchables
 colnames(tab_unmatch)<-c("Batch","Unmatched Cases")
 kable(tab_unmatch,caption="Unmatched cases by batch")
@@ -617,4 +625,117 @@ p_tukey_sim
 
 ```
 
+# Extreme Bounds
+
+Finally we briefly examine the results from randomly assigning all 1,195 unmatched cases to each of the six treatment conditions, again respecting the distribution of unmatched cases by batch. In essence this increases the proportion of subscribers in each condition by `r round(1195/sum(wrkdat$treatment=="A"),3)`--over a 100 percent increase. Depending on the treatment group, this is enough to reverse sign on each of our subgroup comparisons.
+
+```{r ext}
+# function to reassign all unmatched cases by batch to a specific treatment
+1195/sum(wrkdat$treatment=="A")
+data_fn2<-function(x="treatmentF",group="A"){
+   tmp<-wrkdat[,c("subscribedF","batchday2F","treatment",x)]
+   #
+   same<-tmp[tmp$treatment!=group,]
+   same$subscribed_bnd<-same$subscribedF
+   new<-tmp[tmp$treatment==group,]
+   new$subscribed_bnd<-new$subscribedF
+   new1<-new[new$subscribedF==1,]
+   new0<-new[new$subscribedF==0,]
+   batch_assign_fn<-function(batch,size){
+x<-new0$subscribed[new0$batchday2F==batch]
+x<-replace(new0$subscribedF[new0$batchday2F==batch],sample(1:length(new0$subscribedF[new0$batchday2F==batch]),size),1)
+return(x)
+}
+    new0$subscribed_bnd<-unlist(mapply(batch_assign_fn,batch=unmatchables[,1],size=unmatchables[,2]))
+    dat<-rbind(same,new1,new0)
+    return(dat)
+}
+
+# Extreme Proporitions
+
+ext_fn<-function(the.treat="treatmentF",the.group="A"){
+    df<-data_fn2(x=the.treat,group=the.group)
+    old<-unlist(lapply(split(wrkdat$subscribed,f=wrkdat[,the.treat]),function(x){mean(x==1)}))
+     new<-unlist(lapply(split(df$subscribed_bnd,f=df[,the.treat]),function(x){mean(x==1)}))
+    return(rbind(old,new))
+
+}
+apply(ext_fn(the.treat="treatmentF"),2,diff)
+ext_fn(the.treat="treat_bdf")
+ext_fn(the.treat="treat_abcd")
+ext_fn(the.treat="treat_ab")
+
+mean(wrkdat$subscribed)
+
+
+ 
+
+extreme_cmh_fn<-function(the.treat="treatmentF",the.group="A"){
+    df<-data_fn2(x=the.treat,group=the.group)
+    f <- reformulate(paste(the.treat,"|batchday2F"),response="subscribed_bnd")
+    # CMH Test, use asymptotic results for now for now
+    cmh<-cmh_test(f,data=df)
+    return(cmh)
+    
+    
+}
+
+
+ext_cmh_gen_A<-extreme_cmh_fn(the.group="A")
+ext_cmh_gen_B<-extreme_cmh_fn(the.group="B")
+ext_cmh_gen_C<-extreme_cmh_fn(the.group="C")
+ext_cmh_gen_D<-extreme_cmh_fn(the.group="D")
+ext_cmh_gen_E<-extreme_cmh_fn(the.group="E")
+ext_cmh_gen_F<-extreme_cmh_fn(the.group="F")
+
+# All of the general tests remain significant
+# ACE vs BDF # 
+ext_cmh_bdf_A<-extreme_cmh_fn(the.treat="treat_bdf",the.group="A")
+ext_cmh_bdf_B<-extreme_cmh_fn(the.treat="treat_bdf",the.group="B")
+ext_cmh_bdf_C<-extreme_cmh_fn(the.treat="treat_bdf",the.group="C")
+ext_cmh_bdf_D<-extreme_cmh_fn(the.treat="treat_bdf",the.group="D")
+ext_cmh_bdf_E<-extreme_cmh_fn(the.treat="treat_bdf",the.group="E")
+ext_cmh_bdf_F<-extreme_cmh_fn(the.treat="treat_bdf",the.group="F")
+
+# Benefits (ABCD) vs No Benefits (EF)
+ext_cmh_abcd_A<-extreme_cmh_fn(the.treat="treat_abcd",the.group="A")
+ext_cmh_abcd_B<-extreme_cmh_fn(the.treat="treat_abcd",the.group="B")
+ext_cmh_abcd_C<-extreme_cmh_fn(the.treat="treat_abcd",the.group="C")
+ext_cmh_abcd_D<-extreme_cmh_fn(the.treat="treat_abcd",the.group="D")
+ext_cmh_abcd_E<-extreme_cmh_fn(the.treat="treat_abcd",the.group="E")
+ext_cmh_abcd_F<-extreme_cmh_fn(the.treat="treat_abcd",the.group="F")
+
+# List (AB) vs Quiz (CD)
+ext_cmh_ab_A<-extreme_cmh_fn(the.treat="treat_ab",the.group="A")
+ext_cmh_ab_B<-extreme_cmh_fn(the.treat="treat_ab",the.group="B")
+ext_cmh_ab_C<-extreme_cmh_fn(the.treat="treat_ab",the.group="C")
+ext_cmh_ab_D<-extreme_cmh_fn(the.treat="treat_ab",the.group="D")
+ext_cmh_ab_E<-extreme_cmh_fn(the.treat="treat_ab",the.group="E")
+ext_cmh_ab_F<-extreme_cmh_fn(the.treat="treat_ab",the.group="F")
+```
+
+# Code Appendix
+
+```{r appendix, eval=F,echo=T}
+<<setup>>
+<<dv>>
+<<cmh>>
+<<fig1>>
+<<TukeyHSD>>
+<<figTukey>>
+<<subgroup>>
+<<tabbdf>>
+<<tababcd>>
+<<tabab>>
+<<unmatch>>
+<<sensitivity>>
+<<examp>>
+<<cmhSim>>
+<<figCMHsim>>
+<<tukeySim>>
+<<tukeytab>>
+<<figTukeypval>>
+<<figTukeycoef>>
+<<ext>>
+```
 
