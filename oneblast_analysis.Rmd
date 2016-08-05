@@ -585,7 +585,9 @@ sim_tukey_fn<-function(treat="treatmentF"){
 }
 sim_tukey<-do(nsim)*sim_tukey_fn()
 library(plyr)
+```
 
+```{r tukeytab,results="asis"}
 sim_tukey_df<-ddply(sim_tukey,.(Comparison),summarize,
                     diff=mean(diff),
                     lwr=mean(lwr),
