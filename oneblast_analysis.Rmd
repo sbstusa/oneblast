@@ -8,7 +8,10 @@ output:
 ---
 
 ```{r init,echo=F}
-library(knitr)
+## Easy way to look for and install missing packages and load them
+if (!require("pacman")){ install.packages("pacman") }
+pacman::p_temp("knitr","openssl","mosaic","plyr","coin","ggplot")
+## library(knitr)
 opts_chunk$set(eval=T,echo=F,results="hide",message=F,warning=F,cache=T)
 
 ```
@@ -38,7 +41,7 @@ Because the experiment was randomized by batch, and because of trouble matching 
 Do we have enough information to reject the claim that there are no differences between the treatments? We use the generalized Cochran-Mantel-Haensel test to address this question. We are using the coin library because it allows for easy assessment of this test without large sample assumptions.
 
 ```{r}
-library(coin)
+## library(coin)
 
 wrkdat$batchday2F<-factor(wrkdat$batchday2)
 wrkdat$treatmentF<-factor(wrkdat$treatment)
@@ -82,7 +85,7 @@ theprops<-as.data.frame(t(matrix(unlist(lapply(split(wrkdat$subscribed,f=wrkdat$
 colnames(theprops)<-c("pbar","ll","ul")
 theprops$Treatment<-sort(unique(wrkdat$treatment))
 # Plot with ggplot2
-library(ggplot2)
+## library(ggplot2)
 dodge<-position_dodge(width = 0.9)
 p.props<-ggplot(theprops,aes(Treatment,pbar,fill=Treatment))+
     geom_bar(stat = "identity", position = dodge)+
@@ -528,7 +531,7 @@ sim_cmh_fn<-function(treat){
 
 
 # Use mosaic's do wrapper
-library(mosaic)
+## library(mosaic)
 
 sim_cmh_all<-do(nsim)*sim_cmh_fn(treat="treatmentF")
 sim_cmh_all$Comparison<-"All Treatments"
