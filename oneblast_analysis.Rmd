@@ -10,7 +10,7 @@ output:
 ```{r init,echo=F}
 ## Easy way to look for and install missing packages and load them
 if (!require("pacman")){ install.packages("pacman") }
-pacman::p_temp("knitr","openssl","mosaic","plyr","coin","ggplot")
+pacman::p_load("knitr","openssl","mosaic","plyr","coin","ggplot")
 ## library(knitr)
 opts_chunk$set(eval=T,echo=F,results="hide",message=F,warning=F,cache=T)
 
