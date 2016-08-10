@@ -65,6 +65,17 @@ Now we'll start to draw comparisons between specific treatments and groups of tr
 
 In the figure below we show the proportions subscribing in each treatment group with 95-percent confidence intervals. Treatments B and F appear to be the most successful at encouraging subscription to the newsletter.
 
+```{r}
+
+## Harmonic Mean weighted estimates of the proportions
+lm1<-lm(subscribed~treatment+batchday2F,data=wrkdat)
+propsw<- c(coef(lm1)[1],coef(lm1)[1]+coef(lm1)[2:6])
+
+## Batch size weighting:
+
+
+```
+
 ```{r fig1}
 # Wrapper function to grab proportions and CIs
 prop_fn<-function(x){
@@ -78,6 +89,18 @@ prop_fn<-function(x){
 # Apply proportion function to each level of treatment
 # Combine results into data frame for plotting with ggplot
 table(wrkdat$treatment)
+
+## Remove any systematic batch mean effects from the outcome
+wrkdat$sBatchAve<-ave(wrkdat$subscribed,wrkdat$batchday2F)
+## wrkdat$subscribedMD<-with(wrkdat,unsplit(lapply(split(subscribed,batchday2F),function(x){ x - mean(x) }),batchday2F))
+wrkdat$subscribedMD<-wrkdat$subscribed - wrkdat$sBatchAve
+stopifnot(all(round(with(wrkdat,tapply(subscribedMD,batchday2,mean)),10)==0))
+
+## Notice that a positive number is a 1 and a negative is a 0
+table(wrkdat$subscribedMD>0,wrkdat$subscribed)
+
+
+
 theprops<-as.data.frame(t(matrix(unlist(lapply(split(wrkdat$subscribed,f=wrkdat$treatment),prop_fn)),nrow=3))
        )
 # Add names and Treatment indicator
@@ -89,6 +112,8 @@ theprops$Treatment<-c("Opt-in; List",
                       "Opt-in",
                       "Active"
                       )
+
+
 # Plot with ggplot2
 ## library(ggplot2)
 dodge<-position_dodge(width = 0.9)
@@ -105,7 +130,6 @@ p.props
 Next we provide a more formal assessment of the 15 pairwise comparisons by conducting a Tukey Honest Signficant Differences test on an ANOVA model weighted by the size of each batch, with family-wise confidence intervals that reflect the fact that we are making multiple comparisons.
 
 ```{r tukeyHSD}
-wrkdat$sBatchAve<-ave(wrkdat$subscribed,wrkdat$batchday2F)
 # Anova weighted by size of batch
 a1<-aov(I(subscribed-sBatchAve)~treatmentF,wrkdat)
 # Anova without adjusting for batch
