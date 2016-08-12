@@ -63,16 +63,63 @@ There is a lot of evidence against the idea that all six emails had the same eff
 
 Now we'll start to draw comparisons between specific treatments and groups of treatments.
 
-In the figure below we show the proportions subscribing in each treatment group with 95-percent confidence intervals. Treatments B and F appear to be the most successful at encouraging subscription to the newsletter.
+In the figure below we show the proportions subscribing in each treatment group with 95-percent confidence intervals. Treatments B and F appear to be the most successful at encouraging subscription to the newsletter. Because treatment was assigne by block, our overall estimates of proportions are weighted by the size of the block. Here, we follow @lin2013agnostic and the [Green Lab Standard Operating Procedure](https://github.com/acoppock/Green-Lab-SOP) calculating these quantities.
 
 ```{r}
 
+## First subtract the proportion in each batch from the batch indicator.
+prop_b<-unsplit(with(wrkdat, table(batchday2)/sum(table(batchday2))  ),wrkdat$batchday2)
+B <- model.matrix(~-1+batchday2F,data=wrkdat)
+Bmd <- B - prop_b ## subtraction is columnwise
+wrkdat[,colnames(Bmd)]<-Bmd
+
 ## Harmonic Mean weighted estimates of the proportions
 lm1<-lm(subscribed~treatment+batchday2F,data=wrkdat)
-propsw<- c(coef(lm1)[1],coef(lm1)[1]+coef(lm1)[2:6])
+coef(lm1)[1:10]
+propsw<- c(treatmentA=coef(lm1)[[1]],coef(lm1)[1]+coef(lm1)[2:6])
 
-## Batch size weighting:
+## Batch size weighting
 
+### Verifying code using only 3 strata
+wrkdatsmall<-droplevels(wrkdat[wrkdat$batchday2 %in% c(1,2,3),c("subscribed","treatmentF","batchday2F")])
+
+N <- nrow(wrkdatsmall)
+n_b<-table(wrkdatsmall$batchday2) ## assuming same order as tau_b
+prop_b<-n_b/N
+tau_b<-sapply(split(wrkdatsmall,wrkdatsmall$batchday2F),function(dat){ 
+				  sapply(levels(dat$treatmentF),function(i){
+							  mean(dat$subscribed[dat$treatmentF==i]) })
+})
+
+tau_bw<-apply(tau_b[,names(prop_b)],1,function(x){ x[names(prop_b)]*prop_b})
+stopifnot(all.equal(tau_b[,"3"]*prop_b["3"], tau_bw["3",]))
+taus<-colSums(tau_bw)
+
+## Verify by hand.
+with(wrkdatsmall, sum(subscribed[treatmentF=="A" & batchday2F=="1"])/sum( treatmentF=="A" & batchday2F=="1" ) )
+with(wrkdatsmall, sum(subscribed[treatmentF=="D" & batchday2F=="2"])/sum( treatmentF=="D" & batchday2F=="2" ) )
+
+## Since props_b are equal in the test case 
+mean(tau_b[1,])
+
+
+B <- model.matrix(~batchday2F+0,data=wrkdatsmall)
+Bmd <- sapply(1:ncol(B),function(i){ B[,i] - prop_b[i] }) ## subtraction is columnwise
+colnames(Bmd)<-colnames(B)
+wrkdatsmall[,colnames(Bmd)]<-Bmd
+
+bigfmla<-as.formula(paste("subscribed~treatmentF*(",paste(colnames(Bmd)[-1],collapse="+"),")"))
+
+lm2<-lm(bigfmla,data=wrkdat)
+coef(lm2)[1:10]
+propswInter<- c(treatmentA=coef(lm2)[[1]],coef(lm2)[1]+coef(lm2)[2:6])
+propswInter
+taus
+
+## THe mean of the batch factor indicators is 0 by construction
+newdat<- expand.grid(treatmentF=levels(wrkdatsmall$treatmentF), batchday2F2=c(0), batchday2F3=c(0))
+propsInter2<-predict(lm2,newdata=newdat)
+stopifnot(all(propsInter2-propswInter==0))
 
 ```
 
