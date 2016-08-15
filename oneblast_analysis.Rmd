@@ -33,6 +33,10 @@ The outcome is whether or not a member of the experimental pool subscribed to th
 ```{r dv}
 # Use this as the primary DV
 table(wrkdat$subscribed,exclude=c())
+## Make some variables into factors for contingency table analysis
+wrkdat$batchday2F<-factor(wrkdat$batchday2)
+wrkdat$treatmentF<-factor(wrkdat$treatment)
+wrkdat$subscribedF<-factor(wrkdat$subscribed)
 ```
 
 Because the experiment was randomized by batch, and because of trouble matching subscribers uniquely to the experimental pool, we analyze the data by a collapsed version of the 82 batch indicators that we call `batchday`. Nearly all batches were sent 2 per day and the subscriber data only has day of subscription, not hour or minute. This choice, to make new experimental blocks from the original ones will decrease statistical power, but, because the blocks were basically the same size, and because we take blocking into account when we calculate estimates, our estimates will be unbiased.
@@ -42,22 +46,16 @@ Do we have enough information to reject the claim that there are no differences 
 ```{r cmh}
 library(coin)
 
-wrkdat$batchday2F<-factor(wrkdat$batchday2)
-wrkdat$treatmentF<-factor(wrkdat$treatment)
-wrkdat$subscribedF<-factor(wrkdat$subscribed)
-
-## Checking for missing data
-##bigtab<-with(wrkdat,table(batchday2F,treatmentF,subscribed,exclude=c()))
-bigtab<-with(wrkdat,table(treatmentF,subscribed,batchday2F))
-
 cmh1approx<-cmh_test(subscribedF~treatmentF|batchday2F,data=wrkdat,distribution=approximate(B=1000))
 cmh1<-cmh_test(subscribedF~treatmentF|batchday2F,data=wrkdat)
+
+bigtab<-with(wrkdat,table(treatmentF,subscribed,batchday2F))
 cmh2 <- mantelhaen.test(bigtab)
 
-cmh1
+c(pvalue(cmh1),pvalue(cmh1approx)[[1]],cmh2$p.value)
 ```
 
-There is a lot of evidence against the idea that all six emails had the same effect.
+There is a lot of evidence against the idea that all six emails had the same effect and, despite the rareness of the outcome, the substantive interpretation of the test is the same.
 
 # Estimate Difference of Proportions
 
@@ -65,19 +63,20 @@ Now we'll start to draw comparisons between specific treatments and groups of tr
 
 In the figure below we show the proportions subscribing in each treatment group with 95-percent confidence intervals. Treatments B and F appear to be the most successful at encouraging subscription to the newsletter. Because treatment was assigne by block, our overall estimates of proportions are weighted by the size of the block. Here, we follow @lin2013agnostic and the [Green Lab Standard Operating Procedure](https://github.com/acoppock/Green-Lab-SOP) calculating these quantities.
 
-```{r}
+Block randomized experiments require that the estimand be defined with respect to a scheme for weighting the contributions of the different block-specific estimates, and an estimator which is unbiased (or at least consistent) for that estimand. In this case, we have two possible estimands:
+When block sizes vary and especially when the proportion treated per block varies greatly, one can substantially increase precision by estimating using what are known as harmonic weights. In this case, with more or less equal sized blocks (40 out of 41 are equal), and more or less equal proportions, we might also use the simple block size weighting.
 
-## First subtract the proportion in each batch from the batch indicator.
-prop_b<-unsplit(with(wrkdat, table(batchday2)/sum(table(batchday2))  ),wrkdat$batchday2)
-B <- model.matrix(~-1+batchday2F,data=wrkdat)
-Bmd <- B - prop_b ## subtraction is columnwise
-wrkdat[,colnames(Bmd)]<-Bmd
+```{r}
 
 ## Harmonic Mean weighted estimates of the proportions
 lm1<-lm(subscribed~treatment+batchday2F,data=wrkdat)
 coef(lm1)[1:10]
 propsw<- c(treatmentA=coef(lm1)[[1]],coef(lm1)[1]+coef(lm1)[2:6])
+```
 
+Lin (2011,2013) says that block size weighting can be done via a least squares linear model. Here, we use a small subset of the data to show that this is so.
+
+```{r}
 ## Batch size weighting
 
 ### Verifying code using only 3 strata
