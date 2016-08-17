@@ -13,6 +13,7 @@ if (!require("pacman")){ install.packages("pacman") }
 pacman::p_load("knitr","openssl","mosaic","plyr","coin","ggplot2")
 ## library(knitr)
 opts_chunk$set(eval=T,echo=F,results="hide",message=F,warning=F,cache=T)
+options(digits=4,width=100,scipen=8)
 
 ```
 
@@ -20,18 +21,17 @@ opts_chunk$set(eval=T,echo=F,results="hide",message=F,warning=F,cache=T)
 
 # Setup
 
-- Download "wrkdat.csv" and "subscribersPlus.csv" onto local machine in the data subdirectory
+- Download "wrkdat.csv" onto local machine in the data subdirectory
 - Load files and libaries
 
 ```{r setup}
 wrkdat<-read.csv("data/wrkdat.csv",as.is=TRUE)
-subscribers<-read.csv("data/subscribersPlus.csv",as.is=TRUE)
 ```
 
 The outcome is whether or not a member of the experimental pool subscribed to the newsletter. We currently assume that all members of the experimental pool who have a 0 for subscribed did not subscribe under a different name and email address. We return to scrutinize the effect of this assumption later.
 
 ```{r dv}
-# Use this as the primary DV
+# Subscribed is the primary outcome
 table(wrkdat$subscribed,exclude=c())
 ## Make some variables into factors for contingency table analysis
 wrkdat$batchday2F<-factor(wrkdat$batchday2)
@@ -55,7 +55,7 @@ cmh2 <- mantelhaen.test(bigtab)
 c(pvalue(cmh1),pvalue(cmh1approx)[[1]],cmh2$p.value)
 ```
 
-There is a lot of evidence against the idea that all six emails had the same effect and, despite the rareness of the outcome, the substantive interpretation of the test is the same.
+There is a lot of evidence against the idea that all six emails had the same effect and, despite the rareness of the outcome, the substantive interpretation of the test is the same whether or not we rely on large sample assumptions or sample directly from the randomization distribution.
 
 # Estimate Difference of Proportions
 
@@ -64,17 +64,22 @@ Now we'll start to draw comparisons between specific treatments and groups of tr
 In the figure below we show the proportions subscribing in each treatment group with 95-percent confidence intervals. Treatments B and F appear to be the most successful at encouraging subscription to the newsletter. Because treatment was assigne by block, our overall estimates of proportions are weighted by the size of the block. Here, we follow @lin2013agnostic and the [Green Lab Standard Operating Procedure](https://github.com/acoppock/Green-Lab-SOP) calculating these quantities.
 
 Block randomized experiments require that the estimand be defined with respect to a scheme for weighting the contributions of the different block-specific estimates, and an estimator which is unbiased (or at least consistent) for that estimand. In this case, we have two possible estimands:
-When block sizes vary and especially when the proportion treated per block varies greatly, one can substantially increase precision by estimating using what are known as harmonic weights. In this case, with more or less equal sized blocks (40 out of 41 are equal), and more or less equal proportions, we might also use the simple block size weighting.
+When block sizes vary and especially when the proportion treated per block varies greatly, one can substantially increase precision by estimating using what are known as harmonic weights. In this case, with more or less equal sized blocks (40 out of 41 are equal), and more or less equal proportions, we use the simple block size weighting.
 
-```{r}
-
+```{r eval=FALSE, echo=FALSE, include=FALSE}
 ## Harmonic Mean weighted estimates of the proportions
 lm1<-lm(subscribed~treatment+batchday2F,data=wrkdat)
 coef(lm1)[1:10]
 propsw<- c(treatmentA=coef(lm1)[[1]],coef(lm1)[1]+coef(lm1)[2:6])
+propsw
 ```
 
-Lin (2011,2013) says that block size weighting can be done via a least squares linear model. Here, we use a small subset of the data to show that this is so.
+Lin (2011,2013) says that block size weighting can be done via a least squares
+linear model. Here, we use a small subset of the data to show that this is so.
+We do this to take advantage of some easy to implement ways to get p-values and
+confidence intervals after linear model estimation.
+
+## Test that we can recover block size weighted quantites from least squares
 
 ```{r}
 ## Batch size weighting
@@ -82,73 +87,91 @@ Lin (2011,2013) says that block size weighting can be done via a least squares l
 ### Verifying code using only 3 strata
 wrkdatsmall<-droplevels(wrkdat[wrkdat$batchday2 %in% c(1,2,3),c("subscribed","treatmentF","batchday2F")])
 
-N <- nrow(wrkdatsmall)
-n_b<-table(wrkdatsmall$batchday2) ## assuming same order as tau_b
-prop_b<-n_b/N
-tau_b<-sapply(split(wrkdatsmall,wrkdatsmall$batchday2F),function(dat){ 
-				  sapply(levels(dat$treatmentF),function(i){
-							  mean(dat$subscribed[dat$treatmentF==i]) })
-})
+tausbyhand<-function(dat,block,treatment,outcome){
+	##block is a factor indicating block membership
+	##treatment is factor indicating treatment assignment
+	##outcome is numeric (could be binary or continuous)
+	##dat is a data.frame or matrix
+	prop_b<-table(dat[,block])/nrow(dat)
+	tau_b<-sapply(split(dat,dat[,block]),function(blockdat){
+			      sapply(levels(blockdat[,treatment]),function(i){
+					     mean(blockdat[,outcome][blockdat[,treatment]==i]) }) })
+	tau_bw<-apply(tau_b[,names(prop_b)],1,function(x){ x[names(prop_b)]*prop_b})
+	stopifnot(all.equal(tau_b[,"3"]*prop_b["3"], tau_bw["3",]))
+	taus<-colSums(tau_bw)
+	return(taus)
+}
 
-tau_bw<-apply(tau_b[,names(prop_b)],1,function(x){ x[names(prop_b)]*prop_b})
-stopifnot(all.equal(tau_b[,"3"]*prop_b["3"], tau_bw["3",]))
-taus<-colSums(tau_bw)
-
-## Verify by hand.
-with(wrkdatsmall, sum(subscribed[treatmentF=="A" & batchday2F=="1"])/sum( treatmentF=="A" & batchday2F=="1" ) )
-with(wrkdatsmall, sum(subscribed[treatmentF=="D" & batchday2F=="2"])/sum( treatmentF=="D" & batchday2F=="2" ) )
-
-## Since props_b are equal in the test case 
-mean(tau_b[1,])
+taus<-tausbyhand(dat=wrkdatsmall,block="batchday2F",treatment="treatmentF",outcome="subscribed")
 
 
+## Now try this using lm()
+prop_b<-table(wrkdatsmall$batchday2F)/nrow(wrkdatsmall)
 B <- model.matrix(~batchday2F+0,data=wrkdatsmall)
-Bmd <- sapply(1:ncol(B),function(i){ B[,i] - prop_b[i] }) ## subtraction is columnwise
+Bmd <- sapply(1:ncol(B),function(i){ B[,i] - prop_b[i] }) ## subtract off proportion in B
 colnames(Bmd)<-colnames(B)
 wrkdatsmall[,colnames(Bmd)]<-Bmd
 
 bigfmla<-as.formula(paste("subscribed~treatmentF*(",paste(colnames(Bmd)[-1],collapse="+"),")"))
 
-lm2<-lm(bigfmla,data=wrkdat)
+lm2<-lm(bigfmla,data=wrkdatsmall)
 coef(lm2)[1:10]
 propswInter<- c(treatmentA=coef(lm2)[[1]],coef(lm2)[1]+coef(lm2)[2:6])
 propswInter
 taus
+stopifnot(all.equal(taus,propswInter,check.attributes=FALSE))
 
-## THe mean of the batch factor indicators is 0 by construction
+## THe mean of the batch factor indicators is 0 by construction, this is why we can interpret the coefs on treatmentF as telling us about an average across the batches. This next shows this.
 newdat<- expand.grid(treatmentF=levels(wrkdatsmall$treatmentF), batchday2F2=c(0), batchday2F3=c(0))
 propsInter2<-predict(lm2,newdata=newdat)
 stopifnot(all(propsInter2-propswInter==0))
+stopifnot( all(abs(taus - propsInter2) < 1e-10) ) ## funny floating point differences
+
+rm(B,Bmd,bigfmla,propswInter,newdat,propsInter2)
+```
+
+Now create the proportions using the whole dataset.
+
+```{r}
+## Batch size weighting
+
+realtaus<-tausbyhand(dat=wrkdat,block="batchday2F",treatment="treatmentF",outcome="subscribed")
+
+## Now try this using lm()
+prop_b<-table(wrkdat$batchday2F)/nrow(wrkdat)
+B <- model.matrix(~batchday2F+0,data=wrkdat)
+Bmd <- sapply(1:ncol(B),function(i){ B[,i] - prop_b[i] }) 
+colnames(Bmd)<-colnames(B)
+wrkdat[,colnames(Bmd)]<-Bmd
+
+bigfmla<-as.formula(paste("subscribed~treatmentF*(",paste(colnames(Bmd)[-1],collapse="+"),")"))
+
+lm2<-lm(bigfmla,data=wrkdat)
+coef(lm2)[1:10]
+estprops<- c(treatmentA=coef(lm2)[[1]],coef(lm2)[1]+coef(lm2)[2:6])
+estprops
+realtaus
+stopifnot(all.equal(realtaus,estprops,check.attributes=FALSE))
+```
+
+We get the CIs using the HC2 based standard errors following the development in Lin 2011 etc..
+
+```{r}
+library(sandwich)
+library(lmtest)
+source("confintHC.R")
+
+lm3<-lm(update(bigfmla,.~+batchday2F1-1+.),data=wrkdat)
+lm3props<-coef(lm3)[grep("treatment.[A-F]$",names(coef(lm3)))]
+stopifnot(all(abs(lm3props-estprops)<1e-10))
+
+theCIs<-confint(lm3,parm=names(lm3props),vcov=vcovHC(lm3,type="HC2"))
 
 ```
 
+
 ```{r fig1}
-# Wrapper function to grab proportions and CIs
-prop_fn<-function(x){
-    n<-length(x)
-    success<-sum(x==1)
-    proptest<-prop.test(success,n)
-    return(c(proptest$estimate,proptest$conf.int))
-}
-
-# Split data by treatment
-# Apply proportion function to each level of treatment
-# Combine results into data frame for plotting with ggplot
-table(wrkdat$treatment)
-
-## Remove any systematic batch mean effects from the outcome
-wrkdat$sBatchAve<-ave(wrkdat$subscribed,wrkdat$batchday2F)
-## wrkdat$subscribedMD<-with(wrkdat,unsplit(lapply(split(subscribed,batchday2F),function(x){ x - mean(x) }),batchday2F))
-wrkdat$subscribedMD<-wrkdat$subscribed - wrkdat$sBatchAve
-stopifnot(all(round(with(wrkdat,tapply(subscribedMD,batchday2,mean)),10)==0))
-
-## Notice that a positive number is a 1 and a negative is a 0
-table(wrkdat$subscribedMD>0,wrkdat$subscribed)
-
-
-
-theprops<-as.data.frame(t(matrix(unlist(lapply(split(wrkdat$subscribed,f=wrkdat$treatment),prop_fn)),nrow=3))
-       )
+theprops<-data.frame(estprops,theCIs)
 # Add names and Treatment indicator
 colnames(theprops)<-c("pbar","ll","ul")
 theprops$Treatment<-c("Opt-in; List",
@@ -158,25 +181,25 @@ theprops$Treatment<-c("Opt-in; List",
                       "Opt-in",
                       "Active"
                       )
-
+theprops <- theprops[order(theprops$pbar),]
 
 # Plot with ggplot2
 ## library(ggplot2)
 dodge<-position_dodge(width = 0.9)
 p.props<-ggplot(theprops,aes(Treatment,pbar,fill=Treatment))+
-    geom_bar(stat = "identity", position = dodge)+
-    geom_errorbar(aes(ymin=ll,ymax=ul),position = dodge,width=.25)+
-    labs(list(y="Proportion Subscribing to Newsletter",
-         title="Proportion Subscribing by Treatment Group"))+ theme(
-  axis.text.x = element_blank(),axis.ticks.x = element_blank())
+	geom_bar(stat = "identity", position = dodge)+
+	geom_errorbar(aes(ymin=ll,ymax=ul),position = dodge,width=.25)+
+	labs(list(y="Proportion Subscribing to Newsletter",
+		  title="Proportion Subscribing by Treatment Group"))+
+theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
 p.props
 ```
-
 
 Next we provide a more formal assessment of the 15 pairwise comparisons by conducting a Tukey Honest Signficant Differences test on an ANOVA model weighted by the size of each batch, with family-wise confidence intervals that reflect the fact that we are making multiple comparisons.
 
 ```{r tukeyHSD}
 # Anova weighted by size of batch
+wrkdat$sBatchAve <- ave(wrkdat$subscribed,wrkdat$batchday2F)
 a1<-aov(I(subscribed-sBatchAve)~treatmentF,wrkdat)
 # Anova without adjusting for batch
 a1_unweighted<-aov(subscribed~treatmentF,wrkdat)
@@ -193,10 +216,10 @@ plot(TukeyHSD(a1))
 tukey$Comparison<-factor(rownames(tukey),levels=rev(rownames(tukey)))
 
 p.tukey<-ggplot(tukey,aes(y=Comparison,x=diff))+
-    geom_vline(xintercept=0,linetype = 2,col="red")+
-    geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
-        geom_point()+
-    labs(x="Difference in proportions",title="95% family-wise confidence level")
+	geom_vline(xintercept=0,linetype = 2,col="red")+
+	geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
+	geom_point()+
+	labs(x="Difference in proportions",title="95% family-wise confidence level")
 
 
 p.tukey
