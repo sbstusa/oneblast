@@ -251,7 +251,7 @@ wrkdat$treat_ab<-factor(ifelse(wrkdat$treat_ab_01==1,"List","Quiz"))
 # Use an updated mantel-haenszel test so it can calculate CIs for odds ratio
 source("mymantelhaentest.R")
 
-table.maker<-function(x,xnm=NULL,asymp=TRUE){
+table.maker<-function(x,xnm=NULL,ynm,asymp=TRUE, reflevel=NULL){
 	# Input:
 	# x = treatment indicator
 	# xnm = character name of treatment indicator in wrkdat
@@ -260,49 +260,72 @@ table.maker<-function(x,xnm=NULL,asymp=TRUE){
 	# Output:
 	# table of descriptive statistics and tests
 
+	if(!is.null(reflevel)){
+		wrkdat[[xnm]]<-relevel(wrkdat[[xnm]],ref=reflevel)
+	}
+
 	# Difference of Proportions
 	## The asymp version is almost same as the HC2 version below
-	oneway_approx <- oneway_test(as.formula(paste("subscribed~",xnm,"|batchday2F",collapse="")),data=wrkdat,distribution=approximate(B=1000))
-	#oneway_asymp <- oneway_test(as.formula(paste("subscribed~",xnm,"|batchday2F",collapse="")),data=wrkdat,distribution=asymptotic())
+	oneway_approx <- oneway_test(as.formula(paste(ynm,"~",xnm,"|batchday2F",collapse="")),data=wrkdat,distribution=approximate(B=1000))
+	#oneway_asymp <- oneway_test(as.formula(paste(ynm,"~",xnm,"|batchday2F",collapse="")),data=wrkdat,distribution=asymptotic())
 	oneway_approx.stat<-sprintf("%.4f",statistic(oneway_approx))
 	oneway_approx.pval<-sprintf("%.4f",pvalue(oneway_approx))
 	#oneway_asymp.stat<-sprintf("%.4f",statistic(oneway_asymp))
 	#oneway_asymp.pval<-sprintf("%.4f",pvalue(oneway_asymp))
 
 	## Diff of proportions
-	thefmla<-as.formula(paste("subscribed~",xnm,"*(",paste(colnames(Bmd)[-1],collapse="+"),")"))
+	thefmla<-as.formula(paste(ynm,"~",xnm,"*(",paste(colnames(Bmd)[-1],collapse="+"),")"))
 	thelm<-lm(thefmla,data=wrkdat)
 	thediff<-coef(thelm)[grep(":",grep(xnm,names(coef(thelm)),value=TRUE),invert=TRUE,value=TRUE)]
 	theCI<-confint.HC(thelm,parm=names(thediff),thevcov=vcovHC(thelm,type="HC2"))
 	thepval <- coeftest(thelm,vcov=vcovHC(thelm,type="HC2"))[names(thediff),"Pr(>|t|)"]
+	theprops <- c(coef(thelm)[1],coef(thelm)[1] + coef(thelm)[names(thediff)])
+	names(theprops)<-levels(wrkdat[[xnm]])
+	names(thediff)<-paste(names(theprops)[-1],"vs",names(theprops)[1],sep="") ## the diffs are differences from one chosen level
+	names(thepval)<-names(thediff)
+	rownames(theCI)<-names(thediff)
 
 	# MH Test using BatchDay
-	mhtest<-my.mantelhaen.test(table(x,wrkdat$subscribed,wrkdat$batchday2F))
+	mhtest<-my.mantelhaen.test(table(x,wrkdat[[paste(ynm,"F",sep="")]],wrkdat$batchday2F))
 	mhtest.pval<-sprintf("%.4f",round(mhtest$p.value,4))
 	mhtest.stat<-sprintf("%.4f",round(mhtest$statistic,4))
-	mhtest.or<-sprintf("%.4f",round(mhtest$estimate,4))
-	mhtest.or.ci<-paste("[",paste(round(mhtest$conf.int,3),collapse = "; "),"]",sep="")
+	mhtest.or<-try(sprintf("%.4f",round(mhtest$estimate,4)),silent=TRUE)
+	if(inherits(mhtest.or,"try-error")){
+		mhtest.or<-NA
+		mhtest.or.ci<-paste("[",paste(c(NA,NA),collapse = "; "),"]",sep="")
+	} else {
+		mhtest.or.ci<-paste("[",paste(round(mhtest$conf.int,3),collapse = "; "),"]",sep="")
+	}
+
 	# Cochran-Mantel-Haenszel Test approximative (i.e. doesn't rely on large sample assumptions)
-	cmh_approx<-cmh_test(subscribedF~x|batchday2F,data=wrkdat,distribution=approximate(B=1000))
+	cmh_approx<-cmh_test(formula(paste(ynm,"F","~",xnm,"|batchday2F",sep="")),data=wrkdat,distribution=approximate(B=1000))
 	cmh_approx.stat<-sprintf("%.4f",statistic(cmh_approx))
 	cmh_approx.pval<-sprintf("%.4f",pvalue(cmh_approx))
 
-	tab<-rbind(table(x),
-		   table(wrkdat$subscribed,x),
-		   paste("**",round(unlist(lapply(split(wrkdat$subscribed,f=x),mean)),4),"**",sep=""),c(" "," "),
-		   c("*Statistic*","*p-value [CI]*"),
-		   c(sprintf("%.4f",thediff),sprintf("%.4f",thepval)),
-		   c("",paste("[",paste(round(theCI,3),collapse=";"),"]",sep="")),
-		   c( mhtest.stat,mhtest.pval),
-		   c(cmh_approx.stat,cmh_approx.pval),
-		   c( mhtest.or,mhtest.or.ci)
+	tabcols<-length(theprops)
+	diffandp<-rbind(sprintf("%.4f",thediff[names(thepval)]),sprintf("%.4f",thepval))
+	colnames(diffandp)<-names(thepval)
+
+	tab<-rbind(table(wrkdat[[xnm]]),
+		   table(wrkdat[[ynm]],wrkdat[[xnm]]),
+		   sprintf("%.4f",theprops),
+		   rep(c(" "),tabcols),
+		   cbind(matrix("",nrow=nrow(diffandp),ncol=tabcols-ncol(diffandp)),diffandp),
+		   cbind(matrix("",nrow=nrow(diffandp),ncol=tabcols-ncol(diffandp)),t(round(theCI,4))),
+		   rep(c(" "),tabcols),
+		   c(mhtest.stat,mhtest.pval,rep(c(" "),tabcols-2)),
+		   c(cmh_approx.stat,cmh_approx.pval,rep(c(" "),tabcols-2)),
+		   c(mhtest.or,mhtest.or.ci,rep(c(" "),tabcols-2))
 		   )
 
-	rownames(tab)<-c("**Sample**","Not Subscribed","Subscribed",
-			 "Proportion Subscribing","___","**Test**",
-			 "Difference in Proportions",
-			 "Difference in Proportions",
-			 "CMH Test",
+	rownames(tab)<-c("**Sample**","Not Subscribed","Subscribed","Proportion Subscribing",
+			 "___",
+			 paste("Difference in Proportions from",levels(wrkdat[[xnm]])[1]),
+			 "pval for H0: No Diff",
+			 "95% CI for Diff",
+			 "95% CI for Diff",
+			 "___",
+			 "Asymp CMH Test",
 			 "Approx CMH Test  ",
 			 "Common Odds Ratio")
 
@@ -312,6 +335,12 @@ table.maker<-function(x,xnm=NULL,asymp=TRUE){
 
 ```
 
+## Overall table
+
+```{r overalltab, results="asis"}
+taball<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="subscribed")
+kable(taball,caption="All Treatments")
+```
 
 ## A,C,E versus B,D,F (a test of opt-in versus enhanced active).
 
@@ -348,6 +377,7 @@ The table below shows the number of unmatched cases by batch day in the list of 
 
 ```{r unmatch}
 # List of unmatchables by batch day
+# The count comes from a table that we created using the subscribers data and posted to github
 unmatchables<-data.frame(batchday2=sort(unique(wrkdat$batchday2)),
 			 count=c(24,6,14,33,20,24,19,38,8,18,8,99,14,23,20,48,16,12,22,44,16,53,12,26,40,13,64,23,54,24,29,15,52,10,11,65,22,25,40,10,81))
 
@@ -357,104 +387,124 @@ kable(tab_unmatch,caption="Unmatched cases by batch")
 ```
 
 It is possible that these unmatched cases represent "successful" interventions
-(i.e. people who subscribed to the newsletter because of the emails), however
-in the analysis above, they were treated as "failures" (i.e. non-subscribers).
-In this section, we assess the consequences of that assumption through a series
-of simulations that ask what would our results look like had we been able to
-match these subscribers to members of the experimental pool.
+(i.e. people who subscribed to the newsletter because of the emails but who did
+not provide the same name or email address), it is also possible that they
+reflect subscriptions by people who were not a part of the experimental pool
+(and so should be ignored, in essence, we are assuming that this is the case in
+the preceding analyses).  In this section, we assess the consequences of that
+assumption through a series of simulations that ask what would our results look
+like had we been able to match these subscribers to members of the experimental
+pool.
 
-To set bounds on our results we briefly examine the results from randomly
-assigning all 1,195 unmatched cases to each of the six treatment conditions,
-while respecting the distribution of unmatched cases by batch. In essence this
-increases the proportion of subscribers in each condition by `r
-round(1195/sum(wrkdat$treatment=="A"),3)`--over a 100 percent increase.
-Depending on the treatment group, this is enough to reverse sign on each of our
-subgroup comparisons.
+To set bounds on our results we examine the results from assigning all 1,195
+unmatched cases to each of the six treatment conditions, while respecting the
+distribution of unmatched cases by batch.
 
 ```{r ext}
-# function to reassign all unmatched cases by batch to a specific treatment
+## There were a total of 81980 people assigned to treatment "A", so the, at maximum, we could increase those in treatment "A" by .015 or 1.5% (this is if all of the people who were missing were actually supposed to be in treatment A.
 1195/sum(wrkdat$treatment=="A")
 
-data_fn2<-function(x="treatmentF",group="A"){
-	tmp<-wrkdat[,c("subscribedF","batchday2F","treatment",x)]
-	#
-	same<-tmp[tmp$treatment!=group,]
-	same$subscribed_bnd<-same$subscribedF
-	new<-tmp[tmp$treatment==group,]
-	new$subscribed_bnd<-new$subscribedF
-	new1<-new[new$subscribedF==1,]
-	new0<-new[new$subscribedF==0,]
-	batch_assign_fn<-function(batch,size){
-		x<-new0$subscribed[new0$batchday2F==batch]
-		x<-replace(new0$subscribedF[new0$batchday2F==batch],sample(1:length(new0$subscribedF[new0$batchday2F==batch]),size),1)
-		return(x)
+## What if all 1195 unmatched subscribers were assigned to treatment A?
+## That would mean that an additional 24 people in batchday2==1 in treatment group A should be counted as subscribers, and 6 in batch 2, etc..
+
+wrkdat$yallA<-wrkdat$subscribed
+### For Batch 1
+## Assigning the first 24 to 1 since we have no other covariate information here
+wrkdat$yallA[which(wrkdat$batchday2==1 & wrkdat$treatmentF=="A" & wrkdat$subscribed==0)[1:24]]<-1
+with(wrkdat[wrkdat$batchday2==1,],ftable(subscribed,yallA,treatmentF))
+with(wrkdat[wrkdat$batchday2==1,],ftable(subscribed,treatmentF))
+wrkdat$yallA<-NULL
+
+## For all Batches
+wrkdat$yallA<-wrkdat$subscribed
+for(i in 1:nrow(unmatchables)){
+	batch<-unmatchables$batchday2[i]
+	num<-unmatchables$count[i]
+	valuestoreplace<- which(wrkdat$treatmentF=="A" & wrkdat$batchday2==batch & wrkdat$subscribed==0)
+	stopifnot(num<=valuestoreplace)
+	wrkdat$yallA[valuestoreplace[1:num]]<-1
+}
+testB1<-with(wrkdat[wrkdat$batchday2==1,],ftable(subscribed,yallA,treatmentF))
+testB5<-with(wrkdat[wrkdat$batchday2==5,],ftable(subscribed,yallA,treatmentF))
+stopifnot(testB1[2,1]==24)
+stopifnot(testB5[2,1]==20)
+
+## Turn this into a function:
+boundedoutcome<-function(trtvar,trtval){
+	yall<-wrkdat$subscribed
+	for(i in 1:nrow(unmatchables)){
+		## message(i)
+		batch<-unmatchables$batchday2[i]
+		num<-unmatchables$count[i]
+		valuestoreplace<- which(wrkdat[[trtvar]]==trtval & wrkdat$batchday2==batch & wrkdat$subscribed==0)
+		stopifnot(num<=length(valuestoreplace))
+		yall[valuestoreplace[1:num]]<-1
 	}
-	new0$subscribed_bnd<-unlist(mapply(batch_assign_fn,batch=unmatchables[,1],size=unmatchables[,2]))
-	dat<-rbind(same,new1,new0)
-	return(dat)
+	return(yall)
 }
 
-# Extreme Proporitions
+wrkdat$tmp<-boundedoutcome(trtvar="treatmentF",trtval="A")
+stopifnot(all.equal(wrkdat$tmp,wrkdat$yallA))
+wrkdat$tmp<-NULL
+wrkdat$yallA<-NULL
 
-ext_fn<-function(the.treat="treatmentF",the.group="A"){
-	df<-data_fn2(x=the.treat,group=the.group)
-	old<-unlist(lapply(split(wrkdat$subscribed,f=wrkdat[,the.treat]),function(x){mean(x==1)}))
-	new<-unlist(lapply(split(df$subscribed_bnd,f=df[,the.treat]),function(x){mean(x==1)}))
-	return(rbind(old,new))
-}
-apply(ext_fn(the.treat="treatmentF"),2,diff)
-ext_fn(the.treat="treat_bdf")
-ext_fn(the.treat="treat_abcd")
-ext_fn(the.treat="treat_ab")
-
-mean(wrkdat$subscribed)
-
-
-
-
-extreme_cmh_fn<-function(the.treat="treatmentF",the.group="A"){
-	df<-data_fn2(x=the.treat,group=the.group)
-	f <- reformulate(paste(the.treat,"|batchday2F"),response="subscribed_bnd")
-	# CMH Test, use asymptotic results for now for now
-	cmh<-cmh_test(f,data=df)
-	return(cmh)
-
-
-}
-
-
-ext_cmh_gen_A<-extreme_cmh_fn(the.group="A")
-ext_cmh_gen_B<-extreme_cmh_fn(the.group="B")
-ext_cmh_gen_C<-extreme_cmh_fn(the.group="C")
-ext_cmh_gen_D<-extreme_cmh_fn(the.group="D")
-ext_cmh_gen_E<-extreme_cmh_fn(the.group="E")
-ext_cmh_gen_F<-extreme_cmh_fn(the.group="F")
-
-# All of the general tests remain significant
-# ACE vs BDF #
-ext_cmh_bdf_A<-extreme_cmh_fn(the.treat="treat_bdf",the.group="A")
-ext_cmh_bdf_B<-extreme_cmh_fn(the.treat="treat_bdf",the.group="B")
-ext_cmh_bdf_C<-extreme_cmh_fn(the.treat="treat_bdf",the.group="C")
-ext_cmh_bdf_D<-extreme_cmh_fn(the.treat="treat_bdf",the.group="D")
-ext_cmh_bdf_E<-extreme_cmh_fn(the.treat="treat_bdf",the.group="E")
-ext_cmh_bdf_F<-extreme_cmh_fn(the.treat="treat_bdf",the.group="F")
-
-# Benefits (ABCD) vs No Benefits (EF)
-ext_cmh_abcd_A<-extreme_cmh_fn(the.treat="treat_abcd",the.group="A")
-ext_cmh_abcd_B<-extreme_cmh_fn(the.treat="treat_abcd",the.group="B")
-ext_cmh_abcd_C<-extreme_cmh_fn(the.treat="treat_abcd",the.group="C")
-ext_cmh_abcd_D<-extreme_cmh_fn(the.treat="treat_abcd",the.group="D")
-ext_cmh_abcd_E<-extreme_cmh_fn(the.treat="treat_abcd",the.group="E")
-ext_cmh_abcd_F<-extreme_cmh_fn(the.treat="treat_abcd",the.group="F")
-
-# List (AB) vs Quiz (CD)
-ext_cmh_ab_A<-extreme_cmh_fn(the.treat="treat_ab",the.group="A")
-ext_cmh_ab_B<-extreme_cmh_fn(the.treat="treat_ab",the.group="B")
-ext_cmh_ab_C<-extreme_cmh_fn(the.treat="treat_ab",the.group="C")
-ext_cmh_ab_D<-extreme_cmh_fn(the.treat="treat_ab",the.group="D")
-ext_cmh_ab_E<-extreme_cmh_fn(the.treat="treat_ab",the.group="E")
-ext_cmh_ab_F<-extreme_cmh_fn(the.treat="treat_ab",the.group="F")
+wrkdat$yallA<-boundedoutcome(trtvar="treatmentF",trtval="A")
+wrkdat$yallB<-boundedoutcome(trtvar="treatmentF",trtval="B")
+wrkdat$yallC<-boundedoutcome(trtvar="treatmentF",trtval="C")
+wrkdat$yallD<-boundedoutcome(trtvar="treatmentF",trtval="D")
+wrkdat$yallE<-boundedoutcome(trtvar="treatmentF",trtval="E")
+wrkdat$yallF<-boundedoutcome(trtvar="treatmentF",trtval="F")
 ```
+
+Now, we re-calculate the p-values for the overall test distinguishing the
+treatments from each other. And we also present the different estimates of
+proportions and their associated CIs.
+
+First, we see that even under the extreme scenarios that we consider (all
+unmatched subscribers assigned to only one treatment group), we can still
+distinguish the effects of the different treatment groups.
+
+```{r}
+extremeoutcomes<-sort(grep("yall",names(wrkdat),value=TRUE))
+
+## Make factors for cmh
+for(i in extremeoutcomes){
+	wrkdat[[paste(i,"F",sep="")]]<-factor(wrkdat[[i]])
+}
+
+extremeoutcomesF<-paste(extremeoutcomes,"F",sep="")
+
+cmhps<-sapply(extremeoutcomesF,function(y){
+	f <- reformulate(paste("treatmentF","|batchday2F"),response=y)
+	# CMH Test, use asymptotic results for now for now
+	cmh<-cmh_test(f,data=wrkdat)
+	pvalue(cmh)
+})
+
+cmdps
+```
+
+Now we show how the proportions subscribing in each treatment group might differ.
+
+
+```{r}
+
+
+extremeprops<-function(y){
+	thefmla<-as.formula(paste(y,"~treatmentF*(",paste(colnames(Bmd),collapse="+"),")-1"))
+	thelm<-lm(thefmla,data=wrkdat)
+	theprops<-coef(thelm)[grep(":",grep("treatmentF",names(coef(thelm)),value=TRUE),invert=TRUE,value=TRUE)]
+	theCI<-confint.HC(thelm,parm=names(theprops),thevcov=vcovHC(thelm,type="HC2"))
+	thepval <- coeftest(thelm,vcov=vcovHC(thelm,type="HC2"))[names(theprops),"Pr(>|t|)"]
+	if(length(theprops)>1){
+		return(cbind(theprops,thepval,theCI))
+	} else {
+		return(c(theprops,thepval,theCI))
+	}
+}
+
+```
+
 
 # Code Appendix
 
