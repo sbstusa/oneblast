@@ -140,7 +140,7 @@ realtaus<-tausbyhand(dat=wrkdat,block="batchday2F",treatment="treatmentF",outcom
 ## Now try this using lm()
 prop_b<-table(wrkdat$batchday2F)/nrow(wrkdat)
 B <- model.matrix(~batchday2F+0,data=wrkdat)
-Bmd <- sapply(1:ncol(B),function(i){ B[,i] - prop_b[i] }) 
+Bmd <- sapply(1:ncol(B),function(i){ B[,i] - prop_b[i] })
 colnames(Bmd)<-colnames(B)
 wrkdat[,colnames(Bmd)]<-Bmd
 
@@ -161,6 +161,7 @@ library(sandwich)
 library(lmtest)
 source("confintHC.R")
 
+## This next shows that we can get the same answers as suggested by Lin if we don't exclude a level of treatment.
 lm3<-lm(update(bigfmla,.~+batchday2F1-1+.),data=wrkdat)
 lm3props<-coef(lm3)[grep("treatment.[A-F]$",names(coef(lm3)))]
 stopifnot(all(abs(lm3props-estprops)<1e-10))
@@ -250,43 +251,63 @@ wrkdat$treat_ab<-factor(ifelse(wrkdat$treat_ab_01==1,"List","Quiz"))
 # Use an updated mantel-haenszel test so it can calculate CIs for odds ratio
 source("mymantelhaentest.R")
 
-table.maker<-function(x){
+table.maker<-function(x,xnm=NULL,asymp=TRUE){
 	# Input:
 	# x = treatment indicator
+	# xnm = character name of treatment indicator in wrkdat
+	# asymp = logical scale indicating whether asymptotic results should be used
+
 	# Output:
 	# table of descriptive statistics and tests
 
 	# Difference of Proportions
-	##test<-stats::prop.test(table(x,wrkdat$subscribed)[,c(2,1)])
-	test <- oneway_test(as.formula(paste("subscribed~",x,"|batchday2F",collapse="")
-	## diff<- sprintf("%.4f",round(test$estimate[1]-test$estimate[2],4))
-	## pval<- sprintf("%.4f",round(test$p.value,4))
+	## The asymp version is almost same as the HC2 version below
+	oneway_approx <- oneway_test(as.formula(paste("subscribed~",xnm,"|batchday2F",collapse="")),data=wrkdat,distribution=approximate(B=1000))
+	#oneway_asymp <- oneway_test(as.formula(paste("subscribed~",xnm,"|batchday2F",collapse="")),data=wrkdat,distribution=asymptotic())
+	oneway_approx.stat<-sprintf("%.4f",statistic(oneway_approx))
+	oneway_approx.pval<-sprintf("%.4f",pvalue(oneway_approx))
+	#oneway_asymp.stat<-sprintf("%.4f",statistic(oneway_asymp))
+	#oneway_asymp.pval<-sprintf("%.4f",pvalue(oneway_asymp))
+
+	## Diff of proportions
+	thefmla<-as.formula(paste("subscribed~",xnm,"*(",paste(colnames(Bmd)[-1],collapse="+"),")"))
+	thelm<-lm(thefmla,data=wrkdat)
+	thediff<-coef(thelm)[grep(":",grep(xnm,names(coef(thelm)),value=TRUE),invert=TRUE,value=TRUE)]
+	theCI<-confint.HC(thelm,parm=names(thediff),thevcov=vcovHC(thelm,type="HC2"))
+	thepval <- coeftest(thelm,vcov=vcovHC(thelm,type="HC2"))[names(thediff),"Pr(>|t|)"]
+
 	# MH Test using BatchDay
 	mhtest<-my.mantelhaen.test(table(x,wrkdat$subscribed,wrkdat$batchday2F))
 	mhtest.pval<-sprintf("%.4f",round(mhtest$p.value,4))
 	mhtest.stat<-sprintf("%.4f",round(mhtest$statistic,4))
 	mhtest.or<-sprintf("%.4f",round(mhtest$estimate,4))
 	mhtest.or.ci<-paste("[",paste(round(mhtest$conf.int,3),collapse = "; "),"]",sep="")
-	#
+	# Cochran-Mantel-Haenszel Test approximative (i.e. doesn't rely on large sample assumptions)
 	cmh_approx<-cmh_test(subscribedF~x|batchday2F,data=wrkdat,distribution=approximate(B=1000))
 	cmh_approx.stat<-sprintf("%.4f",statistic(cmh_approx))
 	cmh_approx.pval<-sprintf("%.4f",pvalue(cmh_approx))
-
 
 	tab<-rbind(table(x),
 		   table(wrkdat$subscribed,x),
 		   paste("**",round(unlist(lapply(split(wrkdat$subscribed,f=x),mean)),4),"**",sep=""),c(" "," "),
 		   c("*Statistic*","*p-value [CI]*"),
-		   c(diff,pval),
+		   c(sprintf("%.4f",thediff),sprintf("%.4f",thepval)),
+		   c("",paste("[",paste(round(theCI,3),collapse=";"),"]",sep="")),
 		   c( mhtest.stat,mhtest.pval),
 		   c(cmh_approx.stat,cmh_approx.pval),
 		   c( mhtest.or,mhtest.or.ci)
 		   )
-	rownames(tab)<-c("**Sample**","Subscribed","Not Subscribed","Proportion Subscribing","___","**Test**","Difference in Proportions","CMH Test","Approx CMH Test  ","Common Odds Ratio")
+
+	rownames(tab)<-c("**Sample**","Not Subscribed","Subscribed",
+			 "Proportion Subscribing","___","**Test**",
+			 "Difference in Proportions",
+			 "Difference in Proportions",
+			 "CMH Test",
+			 "Approx CMH Test  ",
+			 "Common Odds Ratio")
+
 	colnames(tab)<-paste("**",colnames(tab),"**",sep="")
 	return(tab)
-
-
 }
 
 ```
@@ -295,7 +316,7 @@ table.maker<-function(x){
 ## A,C,E versus B,D,F (a test of opt-in versus enhanced active).
 
 ```{r tabbdf,results="asis"}
-tab_bdf<-table.maker(wrkdat$treat_bdf)
+tab_bdf<-table.maker(wrkdat$treat_bdf,"treat_bdf")
 kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
 ```
 
@@ -304,7 +325,7 @@ kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
 ```{r tababcd,results="asis"}
 # A,B,C,D versus E,F (a test of Block of 10 present versus active)
 
-tab_abcd<-table.maker(wrkdat$treat_abcd)
+tab_abcd<-table.maker(wrkdat$treat_abcd,"treat_abcd")
 kable(tab_abcd,caption="Block of 10 Present or Absent")
 
 
@@ -315,7 +336,7 @@ kable(tab_abcd,caption="Block of 10 Present or Absent")
 ```{r tabab,results="asis"}
 # A,B versus C,D (a test of list versus quiz format)
 
-tab_ab<-table.maker(wrkdat$treat_ab)
+tab_ab<-table.maker(wrkdat$treat_ab,"treat_ab")
 kable(tab_ab)
 
 ```
@@ -335,7 +356,12 @@ colnames(tab_unmatch)<-c("Batch","Unmatched Cases")
 kable(tab_unmatch,caption="Unmatched cases by batch")
 ```
 
-It is possible that these unmatched cases represent "successful" interventions, however in the analysis above, they were treated as "failueres" (i.e. non-subscribers). In this section, we assess the consequences of that assumption through a series of simulations that ask what would our results look like had we been able to match these subscribers to members of the experimental pool.
+It is possible that these unmatched cases represent "successful" interventions
+(i.e. people who subscribed to the newsletter because of the emails), however
+in the analysis above, they were treated as "failures" (i.e. non-subscribers).
+In this section, we assess the consequences of that assumption through a series
+of simulations that ask what would our results look like had we been able to
+match these subscribers to members of the experimental pool.
 
 The code below generates a simulated dataset, in which, for each batch, are randomly assigned as being subscribers.
 
