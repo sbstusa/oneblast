@@ -199,7 +199,7 @@ p.props<-ggplot(theprops,aes(Treatment,pbar,fill=Treatment))+
 	labs(list(y="Proportion Subscribing to Newsletter",
 		  title="Proportion Subscribing by Treatment Group"))+
 theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
-print(p.props)
+p.props
 ```
 
 # Test pairwise differences of treatments
@@ -227,7 +227,7 @@ p.tukey<-ggplot(tukey,aes(y=Comparison,x=diff))+
 	geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
 	geom_point()+
 	labs(x="Difference in proportions",title="95% family-wise confidence level")
-print(p.tukey)
+p.tukey
 ```
 
 # Test differences in the prespecified subgroups of treatments
