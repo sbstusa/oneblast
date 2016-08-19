@@ -12,7 +12,7 @@ toc: TRUE
 if (!require("pacman")){ install.packages("pacman") }
 pacman::p_load("knitr","openssl","mosaic","plyr","coin","ggplot2")
 
-opts_chunk$set(tidy=TRUE,echo=TRUE,results='markup',strip.white=TRUE,cache=TRUE,highlight=TRUE,width.cutoff=132,size='footnotesize',out.width='1.2\\textwidth',message=FALSE,warning=TRUE,comment=NA)
+opts_chunk$set(tidy=TRUE,echo=TRUE,results='markup',strip.white=TRUE,cache=FALSE,highlight=TRUE,width.cutoff=132,size='footnotesize',out.width='1.2\\textwidth',message=FALSE,warning=TRUE,comment=NA)
 
 options(digits=4,width=100,scipen=8)
 ```
@@ -137,7 +137,7 @@ stopifnot( all(abs(taus - propsInter2) < 1e-10) ) ## funny floating point differ
 rm(B,Bmd,bigfmla,propswInter,newdat,propsInter2)
 ```
 
-```{r}
+```{r lmbatch, cache=TRUE}
 ## Batch size weighting
 
 ## First calculate using a function that does the weighting directly
@@ -176,7 +176,7 @@ theCIs<-confint(lm3,parm=names(lm3props),vcov=vcovHC(lm3,type="HC2"))
 
 We show these results in the following graph:
 
-```{r fig1, tidy=FALSE, echo=FALSE, results=TRUE,fig.width=4,fig.height=4}
+```{r fig1, cache=FALSE, tidy=FALSE, echo=FALSE, results=TRUE,fig.width=4,fig.height=4}
 theprops<-data.frame(estprops,theCIs)
 # Add names and Treatment indicator
 colnames(theprops)<-c("pbar","ll","ul")
@@ -199,14 +199,14 @@ p.props<-ggplot(theprops,aes(Treatment,pbar,fill=Treatment))+
 	labs(list(y="Proportion Subscribing to Newsletter",
 		  title="Proportion Subscribing by Treatment Group"))+
 theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
-p.props
+print(p.props)
 ```
 
 # Test pairwise differences of treatments
 
 This study is clearly big enough to distinguish the effects of any one of the treatments from 0. How do the treatments compare to each other?  Next we provide a more formal assessment of the 15 pairwise comparisons by conducting a Tukey Honest Signficant Differences test on an ANOVA model weighted by the size of each batch, with family-wise confidence intervals that reflect the fact that we are making multiple comparisons.
 
-```{r tukeyHSD, warning=FALSE, message=FALSE}
+```{r tukeyHSD, warning=FALSE, message=FALSE, cache=TRUE}
 # Anova weighted by size of batch
 a1<-aov(formula(lm3),wrkdat)
 coef(a1)[names(lm3props)]
@@ -215,7 +215,7 @@ thsda1<-TukeyHSD(a1,which="treatmentF")
 
 We see from the next figure that `r sum(thsda1$treatmentF[,4]<0.05)` out of the `r choose(6,2)` pairwise comparisons are statistically distinguishable from 0 ($p<0.05$). Specifically, the effects for Treatment F are significantly larger than any other treatment except Treatment B --- and there the 95% confidence interval just barely includes 0. The effect for Treatment B, although larger than the remaining Treatments (A,C,D and E) is only distinguishable from Treatment C.
 
-```{r figTukey, results=TRUE}
+```{r figTukey, cache=FALSE, results=TRUE}
 # Get estimates and intervals
 tukey<-data.frame(thsda1$treatmentF)
 ##plot(TukeyHSD(a1))
@@ -227,7 +227,7 @@ p.tukey<-ggplot(tukey,aes(y=Comparison,x=diff))+
 	geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
 	geom_point()+
 	labs(x="Difference in proportions",title="95% family-wise confidence level")
-p.tukey
+print(p.tukey)
 ```
 
 # Test differences in the prespecified subgroups of treatments
@@ -255,11 +255,12 @@ wrkdat$treat_ab_01<-as.numeric(grepl("A|B",wrkdat$treatment))
 wrkdat$treat_ab_01[!grepl("A|B|C|D",wrkdat$treatment)]<-NA
 wrkdat$treat_ab<-factor(ifelse(wrkdat$treat_ab_01==1,"List","Quiz"))
 
-# Use an updated mantel-haenszel test so it can calculate CIs for odds ratio
-source("mymantelhaentest.R")
 ```
 
 ```{r echo=FALSE}
+# Use an updated mantel-haenszel test so it can calculate CIs for odds ratio
+source("mymantelhaentest.R")
+# Load a function to make nice tables
 source("tablemaker.R")
 ```
 
@@ -267,7 +268,7 @@ source("tablemaker.R")
 
 The following table repeats and collects the results from above.
 
-```{r overalltab, results="asis"}
+```{r overalltab, results="asis",cache=TRUE}
 taball<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="subscribed",reflevel="F")
 kable(taball,caption="All Treatments")
 ```
@@ -276,7 +277,7 @@ kable(taball,caption="All Treatments")
 
 The proportion subscribing among the enhanced active treatments was higher than the proportion among the opt-in treatments (not surprising from the perspective of past literature).
 
-```{r tabbdf,results="asis"}
+```{r tabbdf,results="asis",cache=TRUE}
 tab_bdf<-table.maker(wrkdat$treat_bdf,xnm="treat_bdf",ynm="subscribed")
 kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
 ```
@@ -285,7 +286,7 @@ kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
 
 Treatments E and F encouraged more subscriptions than A,B,C, or D as a group.
 
-```{r tababcd,results="asis"}
+```{r tababcd,results="asis",cache=TRUE}
 ## A,B,C,D versus E,F (a test of Block of 10 present versus active)
 
 tab_abcd<-table.maker(wrkdat$treat_abcd,xnm="treat_abcd",ynm="subscribed")
@@ -296,7 +297,7 @@ kable(tab_abcd,caption="Block of 10 Present or Absent")
 
 The list format appears more effective than the quiz format.
 
-```{r tabab,results="asis"}
+```{r tabab,results="asis",cache=TRUE}
 # A,B versus C,D (a test of list versus quiz format)
 tab_ab<-table.maker(wrkdat$treat_ab,xnm="treat_ab",ynm="subscribed")
 kable(tab_ab, caption="List versus Quiz Format")
@@ -403,7 +404,7 @@ First, we see that even under the extreme scenarios that we consider (all
 unmatched subscribers assigned to only one treatment group), we can still
 distinguish the effects of the different treatment groups.
 
-```{r boundedcmh}
+```{r boundedcmh, cache=TRUE}
 extremeoutcomesF<-paste(extremeoutcomes,"F",sep="")
 
 cmhps<-sapply(extremeoutcomesF,function(y){
@@ -419,34 +420,39 @@ cmhps
 These tests show that, across the ways that subscription are asssigned (all to Treatment A, all to B, etc...), we can always distinguish the effects of the treatments from each other.
 
 
+## The winning treatment depends on our assumption of no non-pool subscribers
+
+Below we show that, if all unmatched subscribers came from any one treatment arm, that our results would change: whichever arm receives those subscribers is the winning treatment. We are sure that the actual results, should we be able to know which subscribers came from outside the experiment and which subscribers matched to which row in the experimental pool, would be less extreme than this. However, we do not know how much less extreme.
+
+
 Now we show how the proportions subscribing in each treatment group might differ.
 
-```{r results="asis"}
+```{r results="asis",cache=TRUE}
 tabAllA<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallA",reflevel="F")
 kable(tabAllA, caption="If all the missing subcribers were in treatment A")
 ```
 
-```{r results="asis"}
+```{r results="asis",cache=TRUE}
 tabAllB<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallB",reflevel="F")
 kable(tabAllB, caption="If all the missing subcribers were in treatment B")
 ```
 
-```{r results="asis"}
+```{r results="asis",cache=TRUE}
 tabAllC<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallC",reflevel="F")
 kable(tabAllC, caption="If all the missing subcribers were in treatment C")
 ```
 
-```{r results="asis"}
+```{r results="asis",cache=TRUE}
 tabAllD<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallD",reflevel="F")
 kable(tabAllD, caption="If all the missing subcribers were in treatment D")
 ```
 
-```{r results="asis"}
+```{r results="asis",cache=TRUE}
 tabAllE<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallE",reflevel="F")
 kable(tabAllE, caption="If all the missing subcribers were in treatment E")
 ```
 
-```{r results="asis"}
+```{r results="asis",cache=TRUE}
 tabAllF<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallF",reflevel="F")
 kable(tabAllF, caption="If all the missing subcribers were in treatment F")
 ```
