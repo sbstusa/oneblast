@@ -7,14 +7,14 @@ html_document:
 toc: TRUE
 ---
 
-```{r init,echo=F}
+```{r init,echo=F, results=F}
 ## Easy way to look for and install missing packages and load them
 if (!require("pacman")){ install.packages("pacman") }
 pacman::p_load("knitr","openssl","mosaic","plyr","coin","ggplot2")
-## library(knitr)
-opts_chunk$set(eval=T,echo=F,results="hide",message=F,warning=F,cache=T)
-options(digits=4,width=100,scipen=8)
 
+opts_chunk$set(tidy=TRUE,echo=TRUE,results='markup',strip.white=TRUE,cache=TRUE,highlight=TRUE,width.cutoff=132,size='footnotesize',out.width='1.2\\textwidth',message=FALSE,warning=TRUE,comment=NA)
+
+options(digits=4,width=100,scipen=8)
 ```
 
 \tableofcontents
@@ -39,6 +39,8 @@ wrkdat$treatmentF<-factor(wrkdat$treatment)
 wrkdat$subscribedF<-factor(wrkdat$subscribed)
 ```
 
+# Test for any difference across treatments
+
 Because the experiment was randomized by batch, and because of trouble matching subscribers uniquely to the experimental pool, we analyze the data by a collapsed version of the 82 batch indicators that we call `batchday`. Nearly all batches were sent 2 per day and the subscriber data only has day of subscription, not hour or minute. This choice, to make new experimental blocks from the original ones will decrease statistical power, but, because the blocks were basically the same size, and because we take blocking into account when we calculate estimates, our estimates will be unbiased.
 
 Do we have enough information to reject the claim that there are no differences between the treatments? We use the generalized Cochran-Mantel-Haensel test to address this question. We are using the coin library because it allows for easy assessment of this test without large sample assumptions by simulating from the reference distribution implied by the experiment itself.
@@ -55,33 +57,38 @@ cmh2 <- mantelhaen.test(bigtab)
 c(pvalue(cmh1),pvalue(cmh1approx)[[1]],cmh2$p.value)
 ```
 
-There is a lot of evidence against the idea that all six emails had the same effect and, despite the rareness of the outcome, the substantive interpretation of the test is the same whether or not we rely on large sample assumptions or sample directly from the randomization distribution.
+Those $p$-values indicate that there is a lot of evidence against the idea that all six emails had the same effect and, despite the rareness of the outcome, the substantive interpretation of the test is the same whether or not we rely on large sample assumptions or sample directly from the randomization distribution.
 
-# Estimate Difference of Proportions
+# Estimation and Inference for Difference of Proportions
 
 Now we'll start to draw comparisons between specific treatments and groups of treatments.
 
 In the figure below we show the proportions subscribing in each treatment group with 95-percent confidence intervals. Treatments B and F appear to be the most successful at encouraging subscription to the newsletter. Because treatment was assigne by block, our overall estimates of proportions are weighted by the size of the block. Here, we follow @lin2013agnostic and the [Green Lab Standard Operating Procedure](https://github.com/acoppock/Green-Lab-SOP) calculating these quantities.
 
-Block randomized experiments require that the estimand be defined with respect to a scheme for weighting the contributions of the different block-specific estimates, and an estimator which is unbiased (or at least consistent) for that estimand. In this case, we have two possible estimands:
-When block sizes vary and especially when the proportion treated per block varies greatly, one can substantially increase precision by estimating using what are known as harmonic weights. In this case, with more or less equal sized blocks (40 out of 41 are equal), and more or less equal proportions, we use the simple block size weighting.
+Block randomized experiments require that the estimand be defined with respect
+to a scheme for weighting the contributions of the different block-specific
+estimates, and an estimator which is unbiased (or at least consistent) for that
+estimand. In this case, we have two possible estimands: When block sizes vary
+and especially when the proportion treated per block varies greatly, one can
+substantially increase precision by estimating using what are known as harmonic
+weights. In this case, with more or less equal sized blocks (40 out of 41 are
+equal), and more or less equal proportions, we use the simple block size
+weighting because the proportions themselves are easier to interpret in such a case.
 
 ```{r eval=FALSE, echo=FALSE, include=FALSE}
-## Harmonic Mean weighted estimates of the proportions
+## Harmonic Mean weighted estimates of the proportions. Not included in the rendered version
 lm1<-lm(subscribed~treatment+batchday2F,data=wrkdat)
 coef(lm1)[1:10]
 propsw<- c(treatmentA=coef(lm1)[[1]],coef(lm1)[1]+coef(lm1)[2:6])
 propsw
 ```
 
-Lin (2011,2013) says that block size weighting can be done via a least squares
-linear model. Here, we use a small subset of the data to show that this is so.
-We do this to take advantage of some easy to implement ways to get p-values and
-confidence intervals after linear model estimation.
+We will want to produce confidence intervals and test hypotheses about the
+difference proportions, and Lin (2011,2013) shows that one can use a least squares model to estimate block size weighted differences of proportions and also that the design-based standard errors (and p-values and confidence intervals) can be directly calculated using the HC2 standard errors (heteroskedasticity consistent type 2 standard errors).
 
-## Test that we can recover block size weighted quantites from least squares
+Not shown: Test that we can recover block size weighted quantites from least squares using a subset of the data. 
 
-```{r}
+```{r testbatchsizeweighting, echo=FALSE, results=FALSE}
 ## Batch size weighting
 
 ### Verifying code using only 3 strata
@@ -130,11 +137,10 @@ stopifnot( all(abs(taus - propsInter2) < 1e-10) ) ## funny floating point differ
 rm(B,Bmd,bigfmla,propswInter,newdat,propsInter2)
 ```
 
-Now create the proportions using the whole dataset.
-
 ```{r}
 ## Batch size weighting
 
+## First calculate using a function that does the weighting directly
 realtaus<-tausbyhand(dat=wrkdat,block="batchday2F",treatment="treatmentF",outcome="subscribed")
 
 ## Now try this using lm()
@@ -149,39 +155,38 @@ bigfmla<-as.formula(paste("subscribed~treatmentF*(",paste(colnames(Bmd)[-1],coll
 lm2<-lm(bigfmla,data=wrkdat)
 coef(lm2)[1:10]
 estprops<- c(treatmentA=coef(lm2)[[1]],coef(lm2)[1]+coef(lm2)[2:6])
-estprops
-realtaus
 stopifnot(all.equal(realtaus,estprops,check.attributes=FALSE))
-```
-
-We get the CIs using the HC2 based standard errors following the development in Lin 2011 etc..
-
-```{r}
-library(sandwich)
-library(lmtest)
-source("confintHC.R")
-
 ## This next shows that we can get the same answers as suggested by Lin if we don't exclude a level of treatment.
 lm3<-lm(update(bigfmla,.~+batchday2F1-1+.),data=wrkdat)
 lm3props<-coef(lm3)[grep("treatment.[A-F]$",names(coef(lm3)))]
 stopifnot(all(abs(lm3props-estprops)<1e-10))
-
-theCIs<-confint(lm3,parm=names(lm3props),vcov=vcovHC(lm3,type="HC2"))
-
+lm3props
 ```
 
+Under the assumption that all unmatchable subscribers were not a part of the experiment, we would say that Treatment F was the most powerful, although, the estimated proportions of subscribers are quite low (on the order of 1 to 2 percentage points). Can we distinguish these proportions from 0? 
 
-```{r fig1}
+We get the CIs using the HC2 based standard errors following the development in Lin 2011 etc.
+
+```{r}
+library(sandwich)
+library(lmtest)
+source("confintHC.R") ## our own CI maker with HC SEs
+theCIs<-confint(lm3,parm=names(lm3props),vcov=vcovHC(lm3,type="HC2"))
+```
+
+We show these results in the following graph:
+
+```{r fig1, tidy=FALSE, echo=FALSE, results=TRUE,fig.width=4,fig.height=4}
 theprops<-data.frame(estprops,theCIs)
 # Add names and Treatment indicator
 colnames(theprops)<-c("pbar","ll","ul")
 row.names(theprops)<- c('A','B','C','D','E','F')
-theprops$Treatment<-c("Opt-in; List", # A
-		      "Active; List", # B
-		      "Opt-in; Quiz", # C
-		      "Active; Quiz", # D
-		      "Opt-in",       # E
-		      "Active"        # F
+theprops$Treatment<-c("Opt-in; List",
+		      "Active; List",
+		      "Opt-in; Quiz",
+		      "Active; Quiz",
+		      "Opt-in",
+		      "Active"
 		      )
 theprops$Treatment <- factor(theprops$Treatment, levels=theprops$Treatment[order(theprops$pbar)])
 
@@ -197,9 +202,11 @@ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
 p.props
 ```
 
-Next we provide a more formal assessment of the 15 pairwise comparisons by conducting a Tukey Honest Signficant Differences test on an ANOVA model weighted by the size of each batch, with family-wise confidence intervals that reflect the fact that we are making multiple comparisons.
+# Test pairwise differences of treatments
 
-```{r tukeyHSD}
+This study is clearly big enough to distinguish the effects of any one of the treatments from 0. How do the treatments compare to each other?  Next we provide a more formal assessment of the 15 pairwise comparisons by conducting a Tukey Honest Signficant Differences test on an ANOVA model weighted by the size of each batch, with family-wise confidence intervals that reflect the fact that we are making multiple comparisons.
+
+```{r tukeyHSD, warning=FALSE, message=FALSE}
 # Anova weighted by size of batch
 a1<-aov(formula(lm3),wrkdat)
 coef(a1)[names(lm3props)]
@@ -208,7 +215,7 @@ thsda1<-TukeyHSD(a1,which="treatmentF")
 
 We see from the next figure that `r sum(thsda1$treatmentF[,4]<0.05)` out of the `r choose(6,2)` pairwise comparisons are statistically distinguishable from 0 ($p<0.05$). Specifically, the effects for Treatment F are significantly larger than any other treatment except Treatment B --- and there the 95% confidence interval just barely includes 0. The effect for Treatment B, although larger than the remaining Treatments (A,C,D and E) is only distinguishable from Treatment C.
 
-```{r figTukey}
+```{r figTukey, results=TRUE}
 # Get estimates and intervals
 tukey<-data.frame(thsda1$treatmentF)
 ##plot(TukeyHSD(a1))
@@ -223,7 +230,7 @@ p.tukey<-ggplot(tukey,aes(y=Comparison,x=diff))+
 p.tukey
 ```
 
-# Tests differences in the prespecified subgroups of treatments
+# Test differences in the prespecified subgroups of treatments
 
 This section makes the following comparisons:
 
@@ -250,124 +257,49 @@ wrkdat$treat_ab<-factor(ifelse(wrkdat$treat_ab_01==1,"List","Quiz"))
 
 # Use an updated mantel-haenszel test so it can calculate CIs for odds ratio
 source("mymantelhaentest.R")
+```
 
-table.maker<-function(x,xnm=NULL,ynm,asymp=TRUE, reflevel=NULL){
-	# Input:
-	# x = treatment indicator
-	# xnm = character name of treatment indicator in wrkdat
-	# asymp = logical scale indicating whether asymptotic results should be used
-
-	# Output:
-	# table of descriptive statistics and tests
-
-	if(!is.null(reflevel)){
-		wrkdat[[xnm]]<-relevel(wrkdat[[xnm]],ref=reflevel)
-	}
-
-	# Difference of Proportions
-	## The asymp version is almost same as the HC2 version below
-	oneway_approx <- oneway_test(as.formula(paste(ynm,"~",xnm,"|batchday2F",collapse="")),data=wrkdat,distribution=approximate(B=1000))
-	#oneway_asymp <- oneway_test(as.formula(paste(ynm,"~",xnm,"|batchday2F",collapse="")),data=wrkdat,distribution=asymptotic())
-	oneway_approx.stat<-sprintf("%.4f",statistic(oneway_approx))
-	oneway_approx.pval<-sprintf("%.4f",pvalue(oneway_approx))
-	#oneway_asymp.stat<-sprintf("%.4f",statistic(oneway_asymp))
-	#oneway_asymp.pval<-sprintf("%.4f",pvalue(oneway_asymp))
-
-	## Diff of proportions
-	thefmla<-as.formula(paste(ynm,"~",xnm,"*(",paste(colnames(Bmd)[-1],collapse="+"),")"))
-	thelm<-lm(thefmla,data=wrkdat)
-	thediff<-coef(thelm)[grep(":",grep(xnm,names(coef(thelm)),value=TRUE),invert=TRUE,value=TRUE)]
-	theCI<-confint.HC(thelm,parm=names(thediff),thevcov=vcovHC(thelm,type="HC2"))
-	thepval <- coeftest(thelm,vcov=vcovHC(thelm,type="HC2"))[names(thediff),"Pr(>|t|)"]
-	theprops <- c(coef(thelm)[1],coef(thelm)[1] + coef(thelm)[names(thediff)])
-	names(theprops)<-levels(wrkdat[[xnm]])
-	names(thediff)<-paste(names(theprops)[-1],"vs",names(theprops)[1],sep="") ## the diffs are differences from one chosen level
-	names(thepval)<-names(thediff)
-	rownames(theCI)<-names(thediff)
-
-	# MH Test using BatchDay
-	mhtest<-my.mantelhaen.test(table(x,wrkdat[[paste(ynm,"F",sep="")]],wrkdat$batchday2F))
-	mhtest.pval<-sprintf("%.4f",round(mhtest$p.value,4))
-	mhtest.stat<-sprintf("%.4f",round(mhtest$statistic,4))
-	mhtest.or<-try(sprintf("%.4f",round(mhtest$estimate,4)),silent=TRUE)
-	if(inherits(mhtest.or,"try-error")){
-		mhtest.or<-NA
-		mhtest.or.ci<-paste("[",paste(c(NA,NA),collapse = "; "),"]",sep="")
-	} else {
-		mhtest.or.ci<-paste("[",paste(round(mhtest$conf.int,3),collapse = "; "),"]",sep="")
-	}
-
-	# Cochran-Mantel-Haenszel Test approximative (i.e. doesn't rely on large sample assumptions)
-	cmh_approx<-cmh_test(formula(paste(ynm,"F","~",xnm,"|batchday2F",sep="")),data=wrkdat,distribution=approximate(B=1000))
-	cmh_approx.stat<-sprintf("%.4f",statistic(cmh_approx))
-	cmh_approx.pval<-sprintf("%.4f",pvalue(cmh_approx))
-
-	tabcols<-length(theprops)
-	diffandp<-rbind(sprintf("%.4f",thediff[names(thepval)]),sprintf("%.4f",thepval))
-	colnames(diffandp)<-names(thepval)
-
-	tab<-rbind(table(wrkdat[[xnm]]),
-		   table(wrkdat[[ynm]],wrkdat[[xnm]]),
-		   sprintf("%.4f",theprops),
-		   rep(c(" "),tabcols),
-		   cbind(matrix("",nrow=nrow(diffandp),ncol=tabcols-ncol(diffandp)),diffandp),
-		   cbind(matrix("",nrow=nrow(diffandp),ncol=tabcols-ncol(diffandp)),t(round(theCI,4))),
-		   rep(c(" "),tabcols),
-		   c(mhtest.stat,mhtest.pval,rep(c(" "),tabcols-2)),
-		   c(cmh_approx.stat,cmh_approx.pval,rep(c(" "),tabcols-2)),
-		   c(mhtest.or,mhtest.or.ci,rep(c(" "),tabcols-2))
-		   )
-
-	rownames(tab)<-c("**Sample**","Not Subscribed","Subscribed","Proportion Subscribing",
-			 "___",
-			 paste("Difference in Proportions from",levels(wrkdat[[xnm]])[1]),
-			 "pval for H0: No Diff",
-			 "95% CI for Diff",
-			 "95% CI for Diff",
-			 "___",
-			 "Asymp CMH Test",
-			 "Approx CMH Test  ",
-			 "Common Odds Ratio")
-
-	colnames(tab)<-paste("**",colnames(tab),"**",sep="")
-	return(tab)
-}
-
+```{r echo=FALSE}
+source("tablemaker.R")
 ```
 
 ## Overall table
 
+The following table repeats and collects the results from above.
+
 ```{r overalltab, results="asis"}
-taball<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="subscribed")
+taball<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="subscribed",reflevel="F")
 kable(taball,caption="All Treatments")
 ```
 
 ## A,C,E versus B,D,F (a test of opt-in versus enhanced active).
 
+The proportion subscribing among the enhanced active treatments was higher than the proportion among the opt-in treatments (not surprising from the perspective of past literature).
+
 ```{r tabbdf,results="asis"}
-tab_bdf<-table.maker(wrkdat$treat_bdf,"treat_bdf")
+tab_bdf<-table.maker(wrkdat$treat_bdf,xnm="treat_bdf",ynm="subscribed")
 kable(tab_bdf,caption="Enhanced Active versus Single Opt-In")
 ```
 
-# A,B,C,D versus E,F (a test of Block of 10 present versus active)
+## A,B,C,D versus E,F (a test of Block of 10 present versus active)
+
+Treatments E and F encouraged more subscriptions than A,B,C, or D as a group.
 
 ```{r tababcd,results="asis"}
-# A,B,C,D versus E,F (a test of Block of 10 present versus active)
+## A,B,C,D versus E,F (a test of Block of 10 present versus active)
 
-tab_abcd<-table.maker(wrkdat$treat_abcd,"treat_abcd")
+tab_abcd<-table.maker(wrkdat$treat_abcd,xnm="treat_abcd",ynm="subscribed")
 kable(tab_abcd,caption="Block of 10 Present or Absent")
-
-
 ```
 
-# A,B versus C,D (a test of list versus quiz format)
+## A,B versus C,D (a test of list versus quiz format)
+
+The list format appears more effective than the quiz format.
 
 ```{r tabab,results="asis"}
 # A,B versus C,D (a test of list versus quiz format)
-
-tab_ab<-table.maker(wrkdat$treat_ab,"treat_ab")
-kable(tab_ab)
-
+tab_ab<-table.maker(wrkdat$treat_ab,xnm="treat_ab",ynm="subscribed")
+kable(tab_ab, caption="List versus Quiz Format")
 ```
 
 
@@ -386,7 +318,7 @@ colnames(tab_unmatch)<-c("Batch","Unmatched Cases")
 kable(tab_unmatch,caption="Unmatched cases by batch")
 ```
 
-It is possible that these unmatched cases represent "successful" interventions
+It is possible that these unmatched cases represent successful interventions
 (i.e. people who subscribed to the newsletter because of the emails but who did
 not provide the same name or email address), it is also possible that they
 reflect subscriptions by people who were not a part of the experimental pool
@@ -398,9 +330,9 @@ pool.
 
 To set bounds on our results we examine the results from assigning all 1,195
 unmatched cases to each of the six treatment conditions, while respecting the
-distribution of unmatched cases by batch.
+distribution of unmatched cases by batch. (Code not shown.)
 
-```{r ext}
+```{r ext, echo=FALSE, results=FALSE}
 ## There were a total of 81980 people assigned to treatment "A", so the, at maximum, we could increase those in treatment "A" by .015 or 1.5% (this is if all of the people who were missing were actually supposed to be in treatment A.
 1195/sum(wrkdat$treatment=="A")
 
@@ -454,6 +386,13 @@ wrkdat$yallC<-boundedoutcome(trtvar="treatmentF",trtval="C")
 wrkdat$yallD<-boundedoutcome(trtvar="treatmentF",trtval="D")
 wrkdat$yallE<-boundedoutcome(trtvar="treatmentF",trtval="E")
 wrkdat$yallF<-boundedoutcome(trtvar="treatmentF",trtval="F")
+
+extremeoutcomes<-sort(grep("yall",names(wrkdat),value=TRUE))
+
+## Make factors for cmh
+for(i in extremeoutcomes){
+	wrkdat[[paste(i,"F",sep="")]]<-factor(wrkdat[[i]])
+}
 ```
 
 Now, we re-calculate the p-values for the overall test distinguishing the
@@ -464,14 +403,7 @@ First, we see that even under the extreme scenarios that we consider (all
 unmatched subscribers assigned to only one treatment group), we can still
 distinguish the effects of the different treatment groups.
 
-```{r}
-extremeoutcomes<-sort(grep("yall",names(wrkdat),value=TRUE))
-
-## Make factors for cmh
-for(i in extremeoutcomes){
-	wrkdat[[paste(i,"F",sep="")]]<-factor(wrkdat[[i]])
-}
-
+```{r boundedcmh}
 extremeoutcomesF<-paste(extremeoutcomes,"F",sep="")
 
 cmhps<-sapply(extremeoutcomesF,function(y){
@@ -481,29 +413,44 @@ cmhps<-sapply(extremeoutcomesF,function(y){
 	pvalue(cmh)
 })
 
-cmdps
+cmhps
 ```
+
+These tests show that, across the ways that subscription are asssigned (all to Treatment A, all to B, etc...), we can always distinguish the effects of the treatments from each other.
+
 
 Now we show how the proportions subscribing in each treatment group might differ.
 
-
-```{r}
-
-
-extremeprops<-function(y){
-	thefmla<-as.formula(paste(y,"~treatmentF*(",paste(colnames(Bmd),collapse="+"),")-1"))
-	thelm<-lm(thefmla,data=wrkdat)
-	theprops<-coef(thelm)[grep(":",grep("treatmentF",names(coef(thelm)),value=TRUE),invert=TRUE,value=TRUE)]
-	theCI<-confint.HC(thelm,parm=names(theprops),thevcov=vcovHC(thelm,type="HC2"))
-	thepval <- coeftest(thelm,vcov=vcovHC(thelm,type="HC2"))[names(theprops),"Pr(>|t|)"]
-	if(length(theprops)>1){
-		return(cbind(theprops,thepval,theCI))
-	} else {
-		return(c(theprops,thepval,theCI))
-	}
-}
-
+```{r results="asis"}
+tabAllA<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallA",reflevel="F")
+kable(tabAllA, caption="If all the missing subcribers were in treatment A")
 ```
+
+```{r results="asis"}
+tabAllB<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallB",reflevel="F")
+kable(tabAllB, caption="If all the missing subcribers were in treatment B")
+```
+
+```{r results="asis"}
+tabAllC<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallC",reflevel="F")
+kable(tabAllC, caption="If all the missing subcribers were in treatment C")
+```
+
+```{r results="asis"}
+tabAllD<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallD",reflevel="F")
+kable(tabAllD, caption="If all the missing subcribers were in treatment D")
+```
+
+```{r results="asis"}
+tabAllE<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallE",reflevel="F")
+kable(tabAllE, caption="If all the missing subcribers were in treatment E")
+```
+
+```{r results="asis"}
+tabAllF<-table.maker(wrkdat$treatmentF,xnm="treatmentF",ynm="yallF",reflevel="F")
+kable(tabAllF, caption="If all the missing subcribers were in treatment F")
+```
+
 
 
 # Code Appendix
