@@ -3,8 +3,8 @@ title: "DoD Military Community and Family Policy Military OneSource eNewsletter"
 author: "Paul Testa and Jake Bowers"
 date: '`r format(Sys.Date(), "%B %d, %Y")`'
 output:
-html_document:
-toc: TRUE
+    html_document:
+      toc: TRUE
 ---
 
 ```{r init,echo=F, results=F}
@@ -12,7 +12,7 @@ toc: TRUE
 if (!require("pacman")){ install.packages("pacman") }
 pacman::p_load("knitr","openssl","mosaic","plyr","coin","ggplot2")
 
-opts_chunk$set(tidy=TRUE,echo=TRUE,results='markup',strip.white=TRUE,cache=FALSE,highlight=TRUE,width.cutoff=132,size='footnotesize',out.width='1.2\\textwidth',message=FALSE,warning=TRUE,comment=NA)
+opts_chunk$set(tidy=TRUE,echo=TRUE,results='markup',strip.white=TRUE,cache=FALSE,highlight=TRUE,width.cutoff=132,size='footnotesize',out.width='1.2\\textwidth',message=FALSE,warning=TRUE,comment=NA, fig.path="oneblast_analysis_files/figure-html")
 
 options(digits=4,width=100,scipen=8)
 ```
