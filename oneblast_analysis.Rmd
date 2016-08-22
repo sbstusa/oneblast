@@ -12,7 +12,7 @@ output:
 if (!require("pacman")){ install.packages("pacman") }
 pacman::p_load("knitr","openssl","mosaic","plyr","coin","ggplot2")
 
-opts_chunk$set(tidy=TRUE,echo=TRUE,results='markup',strip.white=TRUE,cache=FALSE,highlight=TRUE,width.cutoff=132,size='footnotesize',out.width='1.2\\textwidth',message=FALSE,warning=TRUE,comment=NA, fig.path="oneblast_analysis_files/figure-html")
+opts_chunk$set(tidy=TRUE,echo=TRUE,results='markup',strip.white=TRUE,cache=FALSE,highlight=TRUE,width.cutoff=132,size='footnotesize',message=FALSE,warning=TRUE,comment=NA)
 
 options(digits=4,width=100,scipen=8)
 ```
@@ -176,7 +176,7 @@ theCIs<-confint(lm3,parm=names(lm3props),vcov=vcovHC(lm3,type="HC2"))
 
 We show these results in the following graph:
 
-```{r fig1, cache=FALSE, tidy=FALSE, echo=FALSE, results=TRUE,fig.width=4,fig.height=4}
+```{r fig1, cache=TRUE, tidy=FALSE, echo=FALSE, results=TRUE}
 theprops<-data.frame(estprops,theCIs)
 # Add names and Treatment indicator
 colnames(theprops)<-c("pbar","ll","ul")
