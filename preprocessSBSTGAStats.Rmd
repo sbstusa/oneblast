@@ -1,0 +1,87 @@
+
+
+This file is mostly to record the series of steps we took to clean and collapse the Google Analytics data.
+
+```{bash, eval=FALSE}
+cp SBST-Batch-SendTracking-GAStats-15Aug2016.csv orig.csv
+sed -i "" "s/\*no //g" SBST-Batch-SendTracking-GAStats-15Aug2016.csv
+## By Hand: Added a header
+sed -i "" 's/\/15,.*$/\/15,/' SBST-Batch-SendTracking-GAStats-15Aug2016.csv
+sed -i "" 's/\/16,.*$/\/16,/' SBST-Batch-SendTracking-GAStats-15Aug2016.csv
+gsed -i.bak '/^[0-9]/! s/^/,/' SBST-Batch-SendTracking-GAStats-15Aug2016.csv ## add extra column, use gnu-sed from brew install gnu-sed
+gsed -i.bak 's/reported/\/ email/g' SBST-Batch-SendTracking-GAStats-15Aug2016.csv
+```
+
+The version of `SBST-Batch-SendTracking-GAStats-15Aug2016.csv` that is on Google Drive was cleaned as above.
+
+
+```{r}
+gadat<-read.csv("SBST-Batch-SendTracking-GAStats-15Aug2016.csv",as.is=TRUE,header=TRUE)
+gadat$Source...Medium[gadat$Source...Medium==""]<-NA
+table(gadat$Source...Medium)
+```
+
+```{r}
+library(dplyr)
+tabdat <- gadat %>% group_by(Source...Medium) %>% summarise(sum(New.Users,na.rm=TRUE))
+names(tabdat) <- c("treatment","newusers")
+tabdat <- tabdat[-7,]
+wrkdat<-read.csv("data/wrkdat.csv",as.is=TRUE)
+assigndat<-wrkdat %>% group_by(treatment) %>% summarize(sent=n())
+
+dat <- cbind(assigndat,newusers=tabdat$newusers)
+stopifnot(tabdat[tabdat$treatment=="newsletter_a / email","newusers"] == dat[dat$treatment=="A","newusers"])
+
+dat$success <- dat$newusers
+dat$failures <- dat$sent - dat$newusers
+
+mat <- as.matrix(dat[,c("success","failures")])
+rownames(mat) <- as.character(dat$treatment)
+
+```
+
+Expand these tables to make analyses easier with existing software:
+
+```{r}
+library(reshape2)
+bigdat <- melt(apply(mat,1,function(x){ c(rep(1,x[1]),rep(0,x[2])) }))
+names(bigdat) <- c("subscribed","treatment")
+bigdat$subscribedF <- factor(bigdat$subscribed,levels=c(1,0))
+bigdat$treatmentF <- factor(bigdat$treatment)
+tab2<-with(bigdat,table(treatment,subscribedF))
+
+
+```
+
+Now, assess the hypotheses of no difference among treatments.
+
+```{r}
+prop.test(tab2)
+
+```
+
+Look at pairwise differences:
+
+```{r}
+library(multcomp)
+thelm <- lm(subscribed~treatmentF,data=bigdat)
+c(coef(thelm)[1], coef(thelm)[1]+coef(thelm)[2:6])
+coeftest(thelm,vcov=vcovHC(thelm,type="HC2"))
+allcomps <- glht(thelm,linfct=mcp(treatmentF="Tukey"))
+summary(allcomps)
+allcompsci <- confint(allcomps) ## adjusted for multiple comparisons
+```
+
+Now calculate CIs for the proportions:
+
+```{r}
+
+library(sandwich)
+library(lmtest)
+lm2 <- lm(subscribed~treatmentF-1,data=bigdat)
+source("confintHC.R") ## our own CI maker with HC SEs
+theCIs<-confint(lm2,vcov=vcovHC(lm2,type="HC2"))
+```
+
+
+
