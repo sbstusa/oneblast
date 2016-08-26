@@ -53,17 +53,23 @@ tab2<-with(bigdat,table(treatment,subscribedF))
 
 ```
 
-Now, assess the hypotheses of no difference among treatments.
+Now, assess the hypotheses of no difference among treatments (comparing the
+approximate chisq test that does not rely on large sample assumptions to the
+one that relies on large sample assumptions).
 
 ```{r}
 prop.test(tab2)
-
+library(coin)
+chisq_test(subscribedF~treatmentF,data=bigdat) ## or chisq_test(tab2)
+chisq_test(subscribedF~treatmentF,data=bigdat,distribution=approximate(B=1000))
 ```
 
 Look at pairwise differences:
 
 ```{r}
 library(multcomp)
+library(sandwich)
+library(lmtest)
 thelm <- lm(subscribed~treatmentF,data=bigdat)
 c(coef(thelm)[1], coef(thelm)[1]+coef(thelm)[2:6])
 coeftest(thelm,vcov=vcovHC(thelm,type="HC2"))
@@ -75,12 +81,37 @@ allcompsci <- confint(allcomps) ## adjusted for multiple comparisons
 Now calculate CIs for the proportions:
 
 ```{r}
-
-library(sandwich)
-library(lmtest)
 lm2 <- lm(subscribed~treatmentF-1,data=bigdat)
 source("confintHC.R") ## our own CI maker with HC SEs
 theCIs<-confint(lm2,vcov=vcovHC(lm2,type="HC2"))
+```
+
+
+```{r}
+theCIs<-as.data.frame(theCIs)
+theCIs$Treatment<-c("Opt-in; List",
+		      "Active; List",
+		      "Opt-in; Quiz",
+		      "Active; Quiz",
+		      "Opt-in",
+		      "Active"
+		      )
+theCIs$pbar <- coef(lm2)
+theCIs$Treatment <- factor(theCIs$Treatment, levels=theCIs$Treatment[order(theCIs$pbar)])
+names(theCIs)[1:2] <- c("ll","ul")
+```
+
+```{r}
+# Plot with ggplot2
+library(ggplot2)
+dodge<-position_dodge(width = 0.9)
+p.props<-ggplot(theCIs,aes(Treatment,pbar,fill=Treatment))+
+	geom_bar(stat = "identity", position = dodge)+
+	geom_errorbar(aes(ymin=ll,ymax=ul),position = dodge,width=.25)+
+	labs(list(y="Proportion Devices New on the Site",
+		  title="Proportion New Devices by Treatment Group"))+
+theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+p.props
 ```
 
 
