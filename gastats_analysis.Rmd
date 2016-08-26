@@ -1,11 +1,10 @@
-
 ---
 title: "DoD Military Community and Family Policy Military OneSource eNewsletter: Google Analytics Results"
 author: "Paul Testa and Jake Bowers"
 date: '`r format(Sys.Date(), "%B %d, %Y")`'
 output:
-    html_document:
-      toc: TRUE
+html_document:
+toc: TRUE
 ---
 
 ```{r init,echo=F, results=F}
@@ -126,10 +125,10 @@ tukey$Comparison<-factor(rownames(tukey),levels=rev(rownames(tukey)))
 tukey$Comparison<-factor(tukey$Comparison,levels=tukey$Comparison[order(tukey$Estimate)])
 
 p.tukey<-ggplot(tukey,aes(y=Comparison,x=Estimate))+
-	geom_vline(xintercept=0,linetype = 2,col="red")+
-	geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
-	geom_point()+
-	labs(x="Difference in proportions",title="95% family-wise confidence level")
+  geom_vline(xintercept=0,linetype = 2,col="red")+
+  geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
+  geom_point()+
+  labs(x="Difference in proportions",title="95% family-wise confidence level")
 p.tukey
 ```
 
@@ -144,13 +143,13 @@ theCIs<-confint(lm2,vcov=vcovHC(lm2,type="HC2"))
 
 ```{r}
 theCIs<-as.data.frame(theCIs)
-theCIs$Treatment<-c("Opt-in; List",
-		      "Active; List",
-		      "Opt-in; Quiz",
-		      "Active; Quiz",
-		      "Opt-in",
-		      "Active"
-		      )
+theCIs$Treatment<-c("Opt-in; List (A)",
+		    "Active; List (B)",
+		    "Opt-in; Quiz (C)",
+		    "Active; Quiz (D)",
+		    "Opt-in (E)",
+		    "Active (F)"
+		    )
 theCIs$pbar <- coef(lm2)
 theCIs$Treatment <- factor(theCIs$Treatment, levels=theCIs$Treatment[order(theCIs$pbar)])
 names(theCIs)[1:2] <- c("ll","ul")
@@ -160,10 +159,10 @@ names(theCIs)[1:2] <- c("ll","ul")
 # Plot with ggplot2
 dodge<-position_dodge(width = 0.9)
 p.props<-ggplot(theCIs,aes(Treatment,pbar,fill=Treatment))+
-	geom_bar(stat = "identity", position = dodge)+
-	geom_errorbar(aes(ymin=ll,ymax=ul),position = dodge,width=.25)+
-	labs(list(y="Proportion Devices New on the Site",
-		  title="Proportion New Devices by Treatment Group"))+
+  geom_bar(stat = "identity", position = dodge)+
+  geom_errorbar(aes(ymin=ll,ymax=ul),position = dodge,width=.25)+
+  labs(list(y="Proportion Devices New on the Site",
+	    title="Proportion New Devices by Treatment Group"))+
 theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
 p.props
 ```
