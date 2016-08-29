@@ -3,8 +3,8 @@ title: "DoD Military Community and Family Policy Military OneSource eNewsletter:
 author: "Paul Testa and Jake Bowers"
 date: '`r format(Sys.Date(), "%B %d, %Y")`'
 output:
-html_document:
-toc: TRUE
+    html_document:
+      toc: TRUE
 ---
 
 ```{r init,echo=F, results=F}
@@ -34,7 +34,7 @@ gsed -i.bak '/^[0-9]/! s/^/,/' SBST-Batch-SendTracking-GAStats-15Aug2016.csv ## 
 gsed -i.bak 's/reported/\/ email/g' SBST-Batch-SendTracking-GAStats-15Aug2016.csv
 ```
 
-The version of `SBST-Batch-SendTracking-GAStats-15Aug2016.csv` that is on Google Drive was cleaned as above. To execute this file, you'll need to download it.
+The version of `SBST-Batch-SendTracking-GAStats-15Aug2016.csv` on Google Drive was cleaned as above. To execute this file, you'll need to download it.
 
 
 ```{r}
