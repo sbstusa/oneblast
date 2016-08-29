@@ -73,10 +73,20 @@ Expand these tables to make analyses easier with existing software:
 
 ```{r}
 bigdat <- melt(apply(mat,1,function(x){ c(rep(1,x[1]),rep(0,x[2])) }))
-names(bigdat) <- c("subscribed","treatment")
-bigdat$subscribedF <- factor(bigdat$subscribed,levels=c(1,0))
+names(bigdat) <- c("newvisit","treatment")
+bigdat$newvisitF <- factor(bigdat$newvisit,levels=c(1,0))
 bigdat$treatmentF <- factor(bigdat$treatment)
-tab2<-with(bigdat,table(treatment,subscribedF))
+tab2<-with(bigdat,table(treatment,newvisitF))
+proptab2<-prop.table(tab2,margin=1)
+```
+
+The emails generated `r sum(tab2[,1])` visits to the newsletter website.
+
+```{r}
+bigdat$active<-ifelse(bigdat$treatment %in% c("F","D","B"),1,0)
+prop.table(with(bigdat,table(active,newvisit)),margin=1)
+bigdat$short<-ifelse(bigdat$treatment %in% c("F","E"),1,0)
+prop.table(with(bigdat,table(short,newvisit)),margin=1)
 ```
 
 # Test for any difference across treatments
@@ -88,9 +98,9 @@ the different treatments had different effects.
 
 ```{r}
 prop.test(x=tab2[,1],n=rowSums(tab2))
-chisq_test(subscribedF~treatmentF,data=bigdat) ## or chisq_test(tab2)
+chisq_test(newvisitF~treatmentF,data=bigdat) ## or chisq_test(tab2)
 ## This next just checks to see if our reliance on the central limit theorem is warranted in a situation with such rare outcomes.
-chisq_test(subscribedF~treatmentF,data=bigdat,distribution=approximate(B=1000))
+chisq_test(newvisitF~treatmentF,data=bigdat,distribution=approximate(B=1000))
 ```
 # Which treatment was most effective?
 
@@ -107,7 +117,7 @@ they read the email.
 
 
 ```{r}
-thelm <- lm(subscribed~treatmentF,data=bigdat)
+thelm <- lm(newvisit~treatmentF,data=bigdat)
 c(coef(thelm)[1], coef(thelm)[1]+coef(thelm)[2:6])
 coeftest(thelm,vcov=vcovHC(thelm,type="HC2"))
 allcomps <- glht(thelm,linfct=mcp(treatmentF="Tukey"))
@@ -135,7 +145,7 @@ p.tukey
 The next figure shows the estimated proportions.
 
 ```{r}
-lm2 <- lm(subscribed~treatmentF-1,data=bigdat)
+lm2 <- lm(newvisit~treatmentF-1,data=bigdat)
 source("confintHC.R") ## our own CI maker with HC SEs
 theCIs<-confint(lm2,vcov=vcovHC(lm2,type="HC2"))
 ```
@@ -161,8 +171,8 @@ dodge<-position_dodge(width = 0.9)
 p.props<-ggplot(theCIs,aes(Treatment,pbar,fill=Treatment))+
   geom_bar(stat = "identity", position = dodge)+
   geom_errorbar(aes(ymin=ll,ymax=ul),position = dodge,width=.25)+
-  labs(list(y="Proportion Devices New on the Site",
-	    title="Proportion New Devices by Treatment Group"))+
+  labs(list(y="Proportion New Site Visits",
+	    title="Proportion New Site Visits by Treatment Group"))+
 theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
 p.props
 ```

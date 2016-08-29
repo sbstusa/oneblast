@@ -39,6 +39,15 @@ wrkdat$treatmentF<-factor(wrkdat$treatment)
 wrkdat$subscribedF<-factor(wrkdat$subscribed)
 ```
 
+Overall, we the active choices were better than the opt in:
+```{r}
+wrkdat$active<-ifelse(wrkdat$treatment %in% c("F","D","B"),1,0)
+prop.table(with(wrkdat,table(active,subscribed)),margin=1)
+wrkdat$short<-ifelse(wrkdat$treatment %in% c("F","E"),1,0)
+prop.table(with(wrkdat,table(short,newvisit)),margin=1)
+```
+
+
 # Test for any difference across treatments
 
 Because the experiment was randomized by batch, and because of trouble matching subscribers uniquely to the experimental pool, we analyze the data by a collapsed version of the 82 batch indicators that we call `batchday`. Nearly all batches were sent 2 per day and the subscriber data only has day of subscription, not hour or minute. This choice, to make new experimental blocks from the original ones will decrease statistical power, but, because the blocks were basically the same size, and because we take blocking into account when we calculate estimates, our estimates will be unbiased.
