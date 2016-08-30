@@ -1,0 +1,196 @@
+---
+title: "DoD Military Community and Family Policy Military OneSource eNewsletter: Google Analytics Results"
+author: "Paul Testa and Jake Bowers"
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output:
+    html_document:
+      toc: TRUE
+---
+
+```{r init,echo=F, results=F}
+## Easy way to look for and install missing packages and load them
+if (!require("pacman")){ install.packages("pacman") }
+pacman::p_load("knitr","openssl","mosaic","dplyr","coin","ggplot2","sandwich","lmtest","reshape2","multcomp","lubridate")
+
+opts_chunk$set(tidy=TRUE,echo=TRUE,results='markup',strip.white=TRUE,cache=FALSE,highlight=TRUE,width.cutoff=132,size='footnotesize',message=FALSE,warning=TRUE,comment=NA)
+
+options(digits=4,width=100,scipen=8)
+```
+
+\tableofcontents
+
+# Setup
+
+This chunk records the series of steps we took to clean and collapse the Google Analytics data after converting it to csv via excel.
+
+```{bash, eval=FALSE}
+## Assuming the bash or zsh shell. This is not R code
+cp SBST-Batch-SendTracking-GAStats-15Aug2016.csv orig.csv
+sed -i "" "s/\*no //g" SBST-Batch-SendTracking-GAStats-15Aug2016.csv
+## By Hand: Added a header
+sed -i "" 's/\/15,.*$/\/15,/' SBST-Batch-SendTracking-GAStats-15Aug2016.csv
+sed -i "" 's/\/16,.*$/\/16,/' SBST-Batch-SendTracking-GAStats-15Aug2016.csv
+gsed -i.bak '/^[0-9]/! s/^/,/' SBST-Batch-SendTracking-GAStats-15Aug2016.csv ## add extra column, use gnu-sed from brew install gnu-sed
+gsed -i.bak 's/reported/\/ email/g' SBST-Batch-SendTracking-GAStats-15Aug2016.csv
+```
+
+The version of `SBST-Batch-SendTracking-GAStats-15Aug2016.csv` on Google Drive was cleaned as above. To execute this file, you'll need to download it.
+
+
+```{r}
+gadat<-read.csv("data/SBST-Batch-SendTracking-GAStats-15Aug2016.csv",as.is=TRUE,header=TRUE)
+gadat$Source...Medium[gadat$Source...Medium==""]<-NA
+table(gadat$Source...Medium)
+```
+
+Google Analytics recorded data for each newsletter treatment for 103 days from the end of Nov 2015 to early March 2016.
+
+```{r}
+range(mdy(gadat$X[gadat$X!=""]))
+```
+
+This next just reorganizes the data for easier analysis.
+
+```{r}
+tabdat <- gadat %>% group_by(Source...Medium) %>% summarise(sum(New.Users,na.rm=TRUE))
+names(tabdat) <- c("treatment","newusers")
+tabdat <- tabdat[-7,]
+wrkdat<-read.csv("data/wrkdat.csv",as.is=TRUE)
+assigndat<-wrkdat %>% group_by(treatment) %>% summarize(sent=n())
+
+dat <- cbind(assigndat,newusers=tabdat$newusers)
+stopifnot(tabdat[tabdat$treatment=="newsletter_a / email","newusers"] == dat[dat$treatment=="A","newusers"])
+
+dat$success <- dat$newusers
+dat$failures <- dat$sent - dat$newusers
+
+mat <- as.matrix(dat[,c("success","failures")])
+rownames(mat) <- as.character(dat$treatment)
+
+```
+
+Expand these tables to make analyses easier with existing software:
+
+```{r}
+bigdat <- melt(apply(mat,1,function(x){ c(rep(1,x[1]),rep(0,x[2])) }))
+names(bigdat) <- c("newvisit","treatment")
+bigdat$newvisitF <- factor(bigdat$newvisit,levels=c(1,0))
+bigdat$treatmentF <- factor(bigdat$treatment)
+tab2<-with(bigdat,table(treatment,newvisitF))
+proptab2<-prop.table(tab2,margin=1)
+```
+
+The emails generated `r sum(tab2[,1])` visits to the newsletter website.
+
+```{r}
+bigdat$active<-ifelse(bigdat$treatment %in% c("F","D","B"),1,0)
+prop.table(with(bigdat,table(active,newvisit)),margin=1)
+bigdat$short<-ifelse(bigdat$treatment %in% c("F","E"),1,0)
+prop.table(with(bigdat,table(short,newvisit)),margin=1)
+
+
+```
+
+# Test for any difference across treatments
+
+Now, assess the hypotheses of no difference among treatments (comparing the
+approximate chisq test that does not rely on large sample assumptions to the
+one that relies on large sample assumptions). We have a lot of evidence that
+the different treatments had different effects.
+
+```{r}
+prop.test(x=tab2[,1],n=rowSums(tab2))
+chisq_test(newvisitF~treatmentF,data=bigdat) ## or chisq_test(tab2)
+## This next just checks to see if our reliance on the central limit theorem is warranted in a situation with such rare outcomes.
+chisq_test(newvisitF~treatmentF,data=bigdat,distribution=approximate(B=1000))
+```
+
+
+```{r}
+
+
+tabActive<-with(bigdat,table(active,newvisitF))
+tabShort<-with(bigdat,table(short,newvisitF))
+
+
+prop.test(x=tabShort[2:1,1],n=rowSums(tabShort[2:1,]))
+prop.test(x=tabActive[2:1,1],n=rowSums(tabActive[2:1,]))
+
+```
+# Which treatment was most effective?
+
+Treatment F (the "Active") treatment was clearly the most effective at
+increasing the number of new devices or web browsers loading the first page of
+the newsletter site with roughly 2.3% of those sent this treatment accessing
+the website compared to, say, about 1.4% for treatment C. Note that this is
+only the same as increasing the number of people responding to the email if
+each person only reached the web page once. More likely these treatments
+motivated people to both click on the link but also to try to use different
+devices to reach the site --- perhaps to show it to others, or if it didn't
+load well on their preferred device or over the network they were using when
+they read the email.
+
+
+```{r}
+thelm <- lm(newvisit~treatmentF,data=bigdat)
+c(coef(thelm)[1], coef(thelm)[1]+coef(thelm)[2:6])
+coeftest(thelm,vcov=vcovHC(thelm,type="HC2"))
+allcomps <- glht(thelm,linfct=mcp(treatmentF="Tukey"))
+sumallcomps<- summary(allcomps)
+allcompsci <- confint(allcomps) ## adjusted for multiple comparisons
+```
+
+We see from the next figure that `r sum(sumallcomps$test$pvalues<0.05)` out of the `r choose(6,2)` pairwise comparisons are statistically distinguishable from 0 at $\alpha=0.05$. Specifically, the effects for Treatment F are significantly larger than any other treatment except Treatment B --- and there the 95% confidence interval just barely includes 0. The effect for Treatment B, although larger than the remaining Treatments (A,C,D and E) is only distinguishable from Treatment C.
+
+```{r figTukey, cache=FALSE, results=TRUE}
+# Get estimates and intervals
+tukey<-data.frame(allcompsci$confint)
+##plot(TukeyHSD(a1))
+tukey$Comparison<-factor(rownames(tukey),levels=rev(rownames(tukey)))
+tukey$Comparison<-factor(tukey$Comparison,levels=tukey$Comparison[order(tukey$Estimate)])
+
+p.tukey<-ggplot(tukey,aes(y=Comparison,x=Estimate))+
+  geom_vline(xintercept=0,linetype = 2,col="red")+
+  geom_errorbarh(aes(xmin=lwr,xmax=upr),height=.25,col="grey")+
+  geom_point()+
+  labs(x="Difference in proportions",title="95% family-wise confidence level")
+p.tukey
+```
+
+The next figure shows the estimated proportions.
+
+```{r}
+lm2 <- lm(newvisit~treatmentF-1,data=bigdat)
+source("confintHC.R") ## our own CI maker with HC SEs
+theCIs<-confint(lm2,vcov=vcovHC(lm2,type="HC2"))
+```
+
+
+```{r}
+theCIs<-as.data.frame(theCIs)
+theCIs$Treatment<-c("Opt-in; List (A)",
+		    "Active; List (B)",
+		    "Opt-in; Quiz (C)",
+		    "Active; Quiz (D)",
+		    "Opt-in (E)",
+		    "Active (F)"
+		    )
+theCIs$pbar <- coef(lm2)
+theCIs$Treatment <- factor(theCIs$Treatment, levels=theCIs$Treatment[order(theCIs$pbar)])
+names(theCIs)[1:2] <- c("ll","ul")
+```
+
+```{r}
+# Plot with ggplot2
+dodge<-position_dodge(width = 0.9)
+p.props<-ggplot(theCIs,aes(Treatment,pbar,fill=Treatment))+
+  geom_bar(stat = "identity", position = dodge)+
+  geom_errorbar(aes(ymin=ll,ymax=ul),position = dodge,width=.25)+
+  labs(list(y="Proportion New Site Visits",
+	    title="Proportion New Site Visits by Treatment Group"))+
+theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+p.props
+```
+
+
+

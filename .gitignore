@@ -1,2 +1,3 @@
 *.csv
 oneblast_analysis_cache/
+.Rproj.user

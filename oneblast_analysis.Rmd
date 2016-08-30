@@ -39,6 +39,15 @@ wrkdat$treatmentF<-factor(wrkdat$treatment)
 wrkdat$subscribedF<-factor(wrkdat$subscribed)
 ```
 
+Overall, we the active choices were better than the opt in:
+```{r}
+wrkdat$active<-ifelse(wrkdat$treatment %in% c("F","D","B"),1,0)
+prop.table(with(wrkdat,table(active,subscribed)),margin=1)
+wrkdat$short<-ifelse(wrkdat$treatment %in% c("F","E"),1,0)
+prop.table(with(wrkdat,table(short,subscribed)),margin=1)
+```
+
+
 # Test for any difference across treatments
 
 Because the experiment was randomized by batch, and because of trouble matching subscribers uniquely to the experimental pool, we analyze the data by a collapsed version of the 82 batch indicators that we call `batchday`. Nearly all batches were sent 2 per day and the subscriber data only has day of subscription, not hour or minute. This choice, to make new experimental blocks from the original ones will decrease statistical power, but, because the blocks were basically the same size, and because we take blocking into account when we calculate estimates, our estimates will be unbiased.
@@ -172,6 +181,22 @@ library(sandwich)
 library(lmtest)
 source("confintHC.R") ## our own CI maker with HC SEs
 theCIs<-confint(lm3,parm=names(lm3props),vcov=vcovHC(lm3,type="HC2"))
+
+wrkdat$activeF <- factor(wrkdat$active)
+wrkdat$shortF <- factor(wrkdat$short)
+
+activefmla<-as.formula(paste("subscribed~activeF*(",paste(colnames(Bmd)[-1],collapse="+"),")"))
+shortfmla<-as.formula(paste("subscribed~shortF*(",paste(colnames(Bmd)[-1],collapse="+"),")"))
+lmActive <- lm(activefmla,data=wrkdat)
+lmShort <- lm(shortfmla,data=wrkdat)
+lmActiveprops <- coef(lmActive)[1:2]
+lmShortprops <- coef(lmShort)[1:2]
+
+activeCIs<-confint(lmActive,parm=names(lmActiveprops),vcov=vcovHC(lmActive,type="HC2"))
+shortCIs<-confint(lmShort,parm=names(lmShortprops),vcov=vcovHC(lmShort,type="HC2"))
+
+c(lmActiveprops,activeCIs[2,])
+c(lmShortprops,shortCIs[2,])
 ```
 
 We show these results in the following graph:

@@ -1,0 +1,126 @@
+
+First, only match unique names (i.e. unique names on the design data).
+There are 881 unique names in the design data that have matches among subscribers
+without matching email addresses.  Among those names, 880 are unique in the
+subscribers database.
+
+Here we see that, among subjects with no email matches, we have some very common names, for example 1 name is repeated 53 times.
+```{r}
+## Here we see that, among subjects with no email matches, we have some very common names, for example 1 name is repeated 53 times.
+table( table(bigdat$name1hash[is.na(bigdat$sdate) & (bigdat$name1hash %in% subdat$name1hash)]) )
+tmptabD<-table(bigdat$name1hash[is.na(bigdat$sdate) & (bigdat$name1hash %in% subdat$name1hash)])
+tmptabS<-table(subdat$name1hash[subdat$name1hash %in% names(tmptabD[tmptabD==1])])
+```
+
+Now, this second round of matching is difficult to validate: we don't really
+know if a "Jake Bowers" in both datasets is the same person. We only know that
+"Jake Bowers" only appeared once in each dataset and that the email addresses
+of Jake Bowers do not match between the two. For this next step, we are willing
+to risk a bit of bias here: we imagine that names that only occur once in each
+file are very likely to be the same person.
+
+```{r}
+bigdat2<-merge(bigdat,
+	       subdat[subdat$name1hash %in% names(tmptabS[tmptabS==1]),]
+	       ,by="name1hash",all.x=TRUE,sort=FALSE,suffixes=c(".big",".sub"))
+
+with(bigdat2,table(is.na(sdate),is.na(Subscribe.Date)))
+bigdat2$sdate2 <- ifelse(is.na(bigdat2$sdate),bigdat2$Subscribe.Date,bigdat2$sdate)
+
+```
+
+Now, we have about 1316 people in the subscribers file who did not match on
+email and who could, in theory, be matched with more than one design data row.
+
+On one hand, we have about 20 people with the same names in the unmatched part
+of the subscribers file.
+
+```{r}
+
+subdat2 <- subdat[!(subdat$name1hash %in% names(tmptabS[tmptabS==1])),]
+table(table(subdat2$name1hash))
+sum(table(subdat2$name1hash)[table(subdat2$name1hash)>1])
+
+```
+
+On the design data, we have up to 9 names remaining to match. And many of these
+are not unique (for example, see the following table for the first name listed
+in this group).
+
+```{r}
+designnames2<-bigdat2[is.na(bigdat2$sdate2),grep("^name",names(bigdat2))]
+apply(designnames2,2,function(x){ sum(!is.na(x)) })
+table(table(designnames2$name1hash))
+numnames<-rowSums(!is.na(designnames2))
+table(numnames)
+```
+
+First, we exclude subscribers for which we have no match on name at all. This
+leaves us with 451 unique names out of the remaining `r nrow(subdat2)` names.
+
+```{r}
+alldesignnames2<-unlist(designnames2)
+possmatchnames<- intersect(subdat2$name1hash,alldesignnames2)
+length(possmatchnames)
+table(table(subdat2$name1hash[subdat2$name1hash %in% possmatchnames]))
+```
+
+There are 8 unique matches in the long list of designnames.
+
+```{r}
+
+tmptabS2<-table(alldesignnames2[alldesignnames2 %in% possmatchnames])
+
+tmptabS3<-table(subdat2$name1hash[subdat2$name1hash %in% names(tmptabS2[tmptabS2==1])])
+
+uniqueothermatches<-names(tmptabS3[tmptabS3==1])
+length(uniqueothermatches)
+```
+
+So, we can add those to the design file.
+
+The rest of the subscribers data is either (1) unmatchable (i.e. no matching
+email address, no matching names) or (2) does not have unique name matches such
+that we could not, with confidence, attribute a subscription to a given
+treatment.
+
+
+
+
+Some people share names. And this will come to be a problem for the analysis of
+this data. We engage with it below. In this section, we mostly explore the
+extent to which people share names.
+
+```{r}
+# Create indicator for multiple names
+# Data
+multi_names<-names(which(table(wrkdat$name1hash)>1))
+wrkdat$multi_name01<-ifelse(wrkdat$name1hash%in%multi_names,1,0)
+table(wrkdat$multi_name01) # 152828 rows share names with at least one other person
+
+# Subscribers
+multi_names_sub<-names(which(table(subscribers$name1hash)>1))
+subscribers$multi_name01<-ifelse(subscribers$name1hash%in%multi_names_sub,1,0)
+stopifnot(table(subscribers$multi_name01)[2]==142) # 142 rows share names with at least one other person
+table(table(subscribers$name1hash))
+
+# Distribution of multiple names: Data
+no_of_multi<-sort(unique(table(wrkdat$name1hash)))
+counts<-hist(table(wrkdat$name1hash),plot=F,breaks=0:93)$count
+counts<-counts[counts!=0]
+tab_names_data<-cbind(c(no_of_multi,"No Name"),
+                          c(counts,sum(is.na(wrkdat$name1hash))),
+                          c(counts,sum(is.na(wrkdat$name1hash)))*c(no_of_multi,1)
+                          )
+colnames(tab_names_data)<-c("Times Name Appears","Frequency","Observations")
+# Distribution of multiple names: Subscribers
+no_of_multi_sub<-sort(unique(table(subscribers$name1hash)))
+counts_sub<-hist(table(subscribers$name1hash),breaks=0:4,plot=F)$count
+counts_sub<-counts_sub[counts_sub!=0]
+tab_names_sub<-cbind(c(no_of_multi_sub,"No Name"),
+                          c(counts_sub,sum(is.na(subscribers$name1hash))),
+                          c(counts_sub,sum(is.na(subscribers$emailhash)))*c(no_of_multi_sub,1)
+                          )
+colnames(tab_names_sub)<-c("Times Name Appears","Frequency","Observations")
+```
+
