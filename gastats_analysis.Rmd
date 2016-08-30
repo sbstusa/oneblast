@@ -87,6 +87,8 @@ bigdat$active<-ifelse(bigdat$treatment %in% c("F","D","B"),1,0)
 prop.table(with(bigdat,table(active,newvisit)),margin=1)
 bigdat$short<-ifelse(bigdat$treatment %in% c("F","E"),1,0)
 prop.table(with(bigdat,table(short,newvisit)),margin=1)
+
+
 ```
 
 # Test for any difference across treatments
@@ -101,6 +103,19 @@ prop.test(x=tab2[,1],n=rowSums(tab2))
 chisq_test(newvisitF~treatmentF,data=bigdat) ## or chisq_test(tab2)
 ## This next just checks to see if our reliance on the central limit theorem is warranted in a situation with such rare outcomes.
 chisq_test(newvisitF~treatmentF,data=bigdat,distribution=approximate(B=1000))
+```
+
+
+```{r}
+
+
+tabActive<-with(bigdat,table(active,newvisitF))
+tabShort<-with(bigdat,table(short,newvisitF))
+
+
+prop.test(x=tabShort[2:1,1],n=rowSums(tabShort[2:1,]))
+prop.test(x=tabActive[2:1,1],n=rowSums(tabActive[2:1,]))
+
 ```
 # Which treatment was most effective?
 
