@@ -44,7 +44,7 @@ Overall, we the active choices were better than the opt in:
 wrkdat$active<-ifelse(wrkdat$treatment %in% c("F","D","B"),1,0)
 prop.table(with(wrkdat,table(active,subscribed)),margin=1)
 wrkdat$short<-ifelse(wrkdat$treatment %in% c("F","E"),1,0)
-prop.table(with(wrkdat,table(short,newvisit)),margin=1)
+prop.table(with(wrkdat,table(short,subscribed)),margin=1)
 ```
 
 
