@@ -17,7 +17,7 @@ Overview and Expectations:
 
 DOD and the SBST collaborated to compare the effectiveness of different modes of email communication in encouraging members of the military to subscribe to a newsletter.
 
-Representatives of the two agencies designed six different strategies of email communication. The SBST randomly assigned the strategies to a list of about 500,000 email addresses provided by the DOD. The DOD distributed the emails to the list. Before the study no one version was expected to be particularly powerful. So, the objective of the study is to find a winning strategy.
+Representatives of the two agencies designed six different strategies of email communication. The SBST randomly assigned the strategies to a list of about 500,000 email addresses provided by the DOD. The DOD distributed the emails to the list. Before the study no one version was expected to be particularly powerful. 
 
 Design: 
 ========
