@@ -445,9 +445,9 @@ cmhps
 These tests show that, across the ways that subscription are asssigned (all to Treatment A, all to B, etc...), we can always distinguish the effects of the treatments from each other.
 
 
-## The winning treatment depends on our assumption of no non-pool subscribers
+## The most effective treatment depends on our assumption of no non-pool subscribers
 
-Below we show that, if all unmatched subscribers came from any one treatment arm, that our results would change: whichever arm receives those subscribers is the winning treatment. We are sure that the actual results, should we be able to know which subscribers came from outside the experiment and which subscribers matched to which row in the experimental pool, would be less extreme than this. However, we do not know how much less extreme.
+Below we show that, if all unmatched subscribers came from any one treatment arm, that our results would change: whichever arm receives those subscribers is the most effective treatment. We are sure that the actual results, should we be able to know which subscribers came from outside the experiment and which subscribers matched to which row in the experimental pool, would be less extreme than this. However, we do not know how much less extreme.
 
 
 Now we show how the proportions subscribing in each treatment group might differ.
